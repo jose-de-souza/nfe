@@ -10,6 +10,10 @@ rmdir /s /q .zig-cache
 ```bash
 zig build
 ```
+## Ver as funcoes exportadas pela dll
+```bash
+dumpbin zig-out\bin\libnfe.dll
+```
 
 ## Testar a dll
 Antes de executar o teste, e necessario copiar libnfe.dll para ```C:\madeiras\erp\libs```
