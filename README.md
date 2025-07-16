@@ -29,6 +29,11 @@ SET_ENV.bat
 zig run test_libnfe.zig -- -lkernel32 -I "C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um"
 ```
 
+## Ver arquitetura da dll (x86 ou 64)
+```bash
+dumpbin /headers zig-out\bin\libnfe.dll |find "machine"
+```
+
 ## Instalar OpenSSL no Windows
 
 ```bash
