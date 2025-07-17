@@ -1,46 +1,26 @@
 # libnfe
 ## Nota Fiscal Eletronica
 
-## Limpar o cache
-```bash
-rmdir /s /q .zig-cache
-```
+## Building
+**Ctrl + Shift + B on VSCode**
 
-## Compilar
-```bash
-zig build
-```
-## Ver as funcoes exportadas pela dll
+## Find out the functions exported by a DLL
 ```bash
 dumpbin zig-out\bin\libnfe.dll
 ```
 
-## Testar a dll
-Antes de executar o teste, e necessario copiar libnfe.dll para ```C:\madeiras\erp\libs```
+## Find out the architecture of a DLL (32 or 64 bits)
 ```bash
-copy zig-out\bin\libnfe.dll C:\madeiras\erp\libs
-```
-e executar 
-```bash
-SET_ENV.bat
+dumpbin /headers build\libnfe.dll |find "machine"
 ```
 
-```bash
-zig run test_libnfe.zig -- -lkernel32 -I "C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um"
-```
-
-## Ver arquitetura da dll (x86 ou 64)
-```bash
-dumpbin /headers zig-out\bin\libnfe.dll |find "machine"
-```
-
-## Instalar OpenSSL no Windows
+## OpenSSL for Windows
 
 ```bash
-https://slproweb.com/products/Win32OpenSSL.html
+[Download OpenSSL installer for Windows](https://slproweb.com/products/Win32OpenSSL.html)
 ```
 
-## Obter cacerts.pem
+## Get cacerts.pem
 
 ```bash
 openssl s_client -connect homologacao.nfe.sefa.pr.gov.br:443 -showcerts > cacerts.pem
