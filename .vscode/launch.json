@@ -12,11 +12,11 @@
             "environment": [
                 {
                     "name": "OPENSSL_MODULES",
-                    "value": "C:\\Users\\jose.DE-SOUZA\\Softdev\\projects\\madeiras\\libs"
+                    "value": "C:\\madeiras\\erp\\libs"
                 },
                 {
                     "name": "PATH",
-                    "value": "${env:PATH};C:\\Users\\jose.DE-SOUZA\\Softdev\\projects\\madeiras\\libs;C:\\Program Files (x86)\\OpenSSL-Win32\\bin"
+                    "value": "${env:PATH};C:\\madeiras\\erp\\libs;C:\\Program Files (x86)\\OpenSSL-Win32\\bin"
                 }
             ],
             "console": "externalTerminal",

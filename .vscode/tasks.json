@@ -7,7 +7,7 @@
             "command": "cmd",
             "args": [
                 "/c",
-                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && where cl.exe || (echo Error: cl.exe not found. Ensure Visual Studio 2022 Community is installed correctly at C:\\Program Files\\Microsoft Visual Studio\\2022\\Community. & exit /b 1)"
+                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && where cl.exe || (echo Error: cl.exe not found. & exit /b 1)"
             ],
             "problemMatcher": [],
             "group": "none"
@@ -49,38 +49,38 @@
             "dependsOn": ["Build libnfe"]
         },
         {
+            "label": "Copy DLL to libs",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "copy /Y \"${workspaceFolder}\\build\\libnfe.dll\" \"C:\\madeiras\\erp\\libs\\\""
+            ],
+            "problemMatcher": [],
+            "dependsOn": ["Build test_libnfe"]
+        },
+        {
             "label": "build",
             "type": "shell",
-            "command": "echo Build completed successfully",
+            "command": "echo Build and copy completed successfully.",
             "args": [],
             "problemMatcher": [],
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
-            "dependsOn": ["Build test_libnfe"],
+            "dependsOn": ["Copy DLL to libs"],
             "dependsOrder": "sequence"
-        },
-        {
-            "label": "Copy libnfe.dll",
-            "type": "shell",
-            "command": "cmd",
-            "args": [
-                "/c",
-                "copy \"${workspaceFolder}\\build\\libnfe.dll\" \"C:\\madeiras\\erp\\libs\\libnfe.dll\" || (echo Error: Failed to copy libnfe.dll to C:\\madeiras\\erp\\libs & exit /b 1)"
-            ],
-            "problemMatcher": [],
-            "group": "none",
-            "dependsOn": ["build"]
         },
         {
             "label": "Run test_libnfe",
             "type": "shell",
             "command": "${workspaceFolder}\\test_libnfe.bat",
-            "group": "test",
-            "problemMatcher": [],
-            "dependsOn": ["Copy libnfe.dll"],
-            "dependsOrder": "sequence"
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": []
         }
     ]
 }
