@@ -2,6 +2,8 @@
 ## Nota Fiscal Eletronica
 
 ## Building
+Assumption: Microsoft's C/C++ extension is installed
+
 **Ctrl + Shift + B on VSCode**
 
 ## Find out the functions exported by a DLL
