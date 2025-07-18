@@ -1,9 +1,8 @@
-:: Set environment variables for development
 @echo off
+set OPENSSL_CONF=C:\madeiras\erp\cfg\openssl.cnf
 set OPENSSL_MODULES=C:\madeiras\erp\libs
 set PATH=%PATH%;C:\madeiras\erp\libs
 
-:: Run the test program
 if exist build\test_libnfe.exe (
     cd build
     test_libnfe.exe

@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-__declspec(dllexport) const char* status_servico(void);
+__declspec(dllexport) const char* status_servico(const char* soap_payload);
 
 #ifdef __cplusplus
 }
