@@ -90,33 +90,33 @@ static void append_xml(cJSON* node, char* buffer, int depth) {
             has_non_attr_children = 1;
             if (cJSON_IsObject(child) || cJSON_IsArray(child)) {
                 append_xml(child, buffer, depth + 1);
-            } else if (cJSON_IsString(child)) {
-                strcat(buffer, child->valuestring);
-                char* end_tag = (char*)malloc(strlen(child->string ? child->string : "root") + 4);
-                sprintf(end_tag, "</%s>", child->string ? child->string : "root");
-                strcat(buffer, end_tag);
-                free(end_tag);
-            } else if (cJSON_IsNumber(child)) {
-                char num_str[32];
-                snprintf(num_str, sizeof(num_str), "%g", child->valuedouble);
-                strcat(buffer, num_str);
-                char* end_tag = (char*)malloc(strlen(child->string ? child->string : "root") + 4);
-                sprintf(end_tag, "</%s>", child->string ? child->string : "root");
-                strcat(buffer, end_tag);
-                free(end_tag);
+            } else if (cJSON_IsString(child) || cJSON_IsNumber(child)) {
+                // Create a new tag for string or number values
+                const char* child_tag = child->string ? child->string : "root";
+                char* child_start_tag = (char*)malloc(strlen(child_tag) + 4);
+                sprintf(child_start_tag, "<%s>", child_tag);
+                strcat(buffer, child_start_tag);
+                free(child_start_tag);
+
+                if (cJSON_IsString(child)) {
+                    strcat(buffer, child->valuestring);
+                } else if (cJSON_IsNumber(child)) {
+                    char num_str[32];
+                    snprintf(num_str, sizeof(num_str), "%g", child->valuedouble);
+                    strcat(buffer, num_str);
+                }
+
+                char* child_end_tag = (char*)malloc(strlen(child_tag) + 4);
+                sprintf(child_end_tag, "</%s>", child_tag);
+                strcat(buffer, child_end_tag);
+                free(child_end_tag);
             }
         }
         child = child->next;
     }
 
-    // Close tag if there are non-attribute children or if the node is empty
-    if (has_non_attr_children || !node->child) {
-        sprintf(buffer + strlen(buffer), "</%s>", tag);
-    } else {
-        // Convert to self-closing tag if only attributes
-        buffer[strlen(buffer) - 1] = '/';
-        strcat(buffer, ">");
-    }
+    // Close tag
+    sprintf(buffer + strlen(buffer), "</%s>", tag);
 }
 
 // JSON to XML conversion
@@ -139,6 +139,7 @@ static char* json_to_xml(const char* json_input) {
     // Start XML
     strcat(xml, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
 
+    // Process the soap:Envelope object directly
     cJSON* envelope = cJSON_GetObjectItem(json, "soap:Envelope");
     if (!envelope) {
         fprintf(stderr, "No soap:Envelope found in JSON\n");
@@ -147,7 +148,7 @@ static char* json_to_xml(const char* json_input) {
         return NULL;
     }
 
-    // Process the entire envelope
+    // Process the envelope
     append_xml(envelope, xml, 0);
     fprintf(stderr, "Generated XML: %s\n", xml); // Debug output
     cJSON_Delete(json);
