@@ -1,63 +1,10 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "cJSON.h"
+#include "src/nfe_utils.h"
 
-// Helper function to append XML tags
-static void append_xml(cJSON* node, char* buffer, int depth) {
-    if (!node) return;
-    char indent[256] = {0};
-    for (int i = 0; i < depth * 2; i++) indent[i] = ' ';
-    
-    if (cJSON_IsObject(node)) {
-        cJSON* child = node->child;
-        while (child) {
-            char* tag = child->string;
-            if (strncmp(tag, "@", 1) == 0) { // Attributes
-                child = child->next;
-                continue;
-            }
-            char* start_tag = (char*)malloc(strlen(tag) + 256);
-            sprintf(start_tag, "\n%s<%s", indent, tag);
-            
-            // Add attributes
-            cJSON* attr = node->child;
-            while (attr) {
-                if (strncmp(attr->string, "@", 1) == 0) {
-                    char* attr_name = attr->string + 1; // Skip '@'
-                    if (cJSON_IsString(attr)) {
-                        sprintf(start_tag + strlen(start_tag), " %s=\"%s\"", attr_name, attr->valuestring);
-                    }
-                }
-                attr = attr->next;
-            }
-            strcat(start_tag, ">");
-            strcat(buffer, start_tag);
-            free(start_tag);
-
-            if (cJSON_IsObject(child) || cJSON_IsArray(child)) {
-                append_xml(child, buffer, depth + 1);
-                sprintf(buffer + strlen(buffer), "\n%s</%s>", indent, tag);
-            } else if (cJSON_IsString(child)) {
-                strcat(buffer, child->valuestring);
-                sprintf(buffer + strlen(buffer), "</%s>", tag);
-            } else if (cJSON_IsNumber(child)) {
-                char num_str[32];
-                snprintf(num_str, sizeof(num_str), "%g", child->valuedouble);
-                strcat(buffer, num_str);
-                sprintf(buffer + strlen(buffer), "</%s>", tag);
-            }
-            child = child->next;
-        }
-    } else if (cJSON_IsArray(node)) {
-        cJSON* child = node->child;
-        while (child) {
-            append_xml(child, buffer, depth);
-            child = child->next;
-        }
-    }
-}
-
-// JSON to XML conversion
+// JSON to XML conversion for status_servico
 static char* json_to_xml(const char* json_input) {
     cJSON* json = cJSON_Parse(json_input);
     if (!json) {
@@ -91,6 +38,7 @@ static char* json_to_xml(const char* json_input) {
 }
 
 int main() {
+    // Test 1: JSON to XML for status_servico
     const char* json_payload =
         "{"
         "\"soap:Envelope\": {"
@@ -116,12 +64,44 @@ int main() {
         "}"
         "}";
 
+    printf("Testing JSON to XML conversion for status_servico:\n");
     char* xml_output = json_to_xml(json_payload);
     if (!xml_output) {
-        printf("Failed to convert JSON to XML\n");
+        printf("Failed to convert JSON to XML for status_servico\n");
         return 1;
     }
-    printf("Generated XML:\n%s\n", xml_output);
+    printf("Generated XML for status_servico:\n%s\n\n", xml_output);
     free(xml_output);
+
+    // Test 2: JSON to XML for enviar_nfe
+    printf("Testing JSON to XML conversion for enviar_nfe:\n");
+    FILE* fp = fopen("test\\nfe.json", "r");
+    if (!fp) {
+        printf("Failed to open test\\nfe.json\n");
+        return 1;
+    }
+    fseek(fp, 0, SEEK_END);
+    long size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    char* json_nfe_payload = (char*)malloc(size + 1);
+    if (!json_nfe_payload) {
+        printf("Failed to allocate memory for JSON NFe payload\n");
+        fclose(fp);
+        return 1;
+    }
+    fread(json_nfe_payload, 1, size, fp);
+    json_nfe_payload[size] = '\0';
+    fclose(fp);
+
+    char* nfe_xml_output = json_to_nfe_xml(json_nfe_payload);
+    if (!nfe_xml_output) {
+        printf("Failed to convert JSON to XML for enviar_nfe\n");
+        free(json_nfe_payload);
+        return 1;
+    }
+    printf("Generated XML for enviar_nfe:\n%s\n", nfe_xml_output);
+    free(nfe_xml_output);
+    free(json_nfe_payload);
+
     return 0;
 }

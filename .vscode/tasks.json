@@ -54,10 +54,11 @@
             "command": "cmd",
             "args": [
                 "/c",
-                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && cl /D_DEBUG /MDd /Zi /nologo /W3 /D_CRT_SECURE_NO_WARNINGS /I \"${workspaceFolder}\\src\" /I \"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\include\" \"${workspaceFolder}\\test_json_to_xml.c\" /link /MACHINE:X86 /OUT:\"${workspaceFolder}\\build\\test_json_to_xml.exe\" /LIBPATH:\"${workspaceFolder}\\build\" /LIBPATH:\"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\debug\\lib\" cjson.lib"
+                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && cl /D_DEBUG /MDd /Zi /nologo /W3 /D_CRT_SECURE_NO_WARNINGS /I \"${workspaceFolder}\\src\" /I \"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\include\" \"${workspaceFolder}\\test_json_to_xml.c\" /link /MACHINE:X86 /OUT:\"${workspaceFolder}\\build\\test_json_to_xml.exe\" /LIBPATH:\"${workspaceFolder}\\build\" /LIBPATH:\"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\debug\\lib\" \"${workspaceFolder}\\build\\libnfe.lib\" cjson.lib"
             ],
             "problemMatcher": ["$msCompile"],
-            "group": "build"
+            "group": "build",
+            "dependsOn": ["Build libnfe"]
         },
         {
             "label": "Copy DLL to libs",

@@ -10,7 +10,7 @@
 #include <openssl/crypto.h>
 #include <openssl/x509.h>
 #include "libnfe.h"
-#include "cJSON.h"
+#include "nfe_utils.h"
 
 // Environment enum
 typedef enum {
@@ -28,7 +28,7 @@ typedef struct {
 } Config;
 
 // Static buffer for response and error messages
-static char response_buffer[4096] = {0};
+static char response_buffer[8192] = {0};
 
 static const char* return_error(const char* msg) {
     size_t msg_len = strlen(msg);
@@ -48,7 +48,7 @@ static int is_json(const char* input) {
 }
 
 // Helper function to append XML tags
-static void append_xml(cJSON* node, char* buffer, int depth) {
+void append_xml(cJSON* node, char* buffer, int depth) {
     if (!node) return;
 
     // Skip if node is an attribute (starts with '@')
@@ -119,7 +119,43 @@ static void append_xml(cJSON* node, char* buffer, int depth) {
     sprintf(buffer + strlen(buffer), "</%s>", tag);
 }
 
-// JSON to XML conversion
+// JSON to XML conversion for NFe submission
+char* json_to_nfe_xml(const char* json_input) {
+    cJSON* json = cJSON_Parse(json_input);
+    if (!json) {
+        fprintf(stderr, "JSON parsing failed: %s\n", cJSON_GetErrorPtr());
+        return NULL;
+    }
+
+    // Buffer for XML output
+    char* xml = (char*)malloc(16384); // Larger buffer for NFe
+    if (!xml) {
+        cJSON_Delete(json);
+        fprintf(stderr, "Failed to allocate XML buffer\n");
+        return NULL;
+    }
+    xml[0] = '\0';
+
+    // Start XML
+    strcat(xml, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+    strcat(xml, "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\" xmlns=\"http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4\">");
+    strcat(xml, "<soap:Header><nfeCabecMsg><cUF>41</cUF><versaoDados>4.00</versaoDados></nfeCabecMsg></soap:Header>");
+    strcat(xml, "<soap:Body><nfeDadosMsg><enviNFe versao=\"4.00\" xmlns=\"http://www.portalfiscal.inf.br/nfe\">");
+    strcat(xml, "<idLote>1</idLote><indSinc>1</indSinc><NFe xmlns=\"http://www.portalfiscal.inf.br/nfe\">");
+    strcat(xml, "<infNFe versao=\"4.00\" Id=\"NFe41150705692150000127550010000111890000000000\">");
+
+    // Process the JSON content
+    append_xml(json, xml, 0);
+
+    // Close NFe tags
+    strcat(xml, "</infNFe></NFe></enviNFe></nfeDadosMsg></soap:Body></soap:Envelope>");
+
+    fprintf(stderr, "Generated XML: %s\n", xml); // Debug output
+    cJSON_Delete(json);
+    return xml;
+}
+
+// JSON to XML conversion for status_servico
 static char* json_to_xml(const char* json_input) {
     cJSON* json = cJSON_Parse(json_input);
     if (!json) {
@@ -139,7 +175,6 @@ static char* json_to_xml(const char* json_input) {
     // Start XML
     strcat(xml, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
 
-    // Process the soap:Envelope object directly
     cJSON* envelope = cJSON_GetObjectItem(json, "soap:Envelope");
     if (!envelope) {
         fprintf(stderr, "No soap:Envelope found in JSON\n");
@@ -148,9 +183,7 @@ static char* json_to_xml(const char* json_input) {
         return NULL;
     }
 
-    // Process the envelope
     append_xml(envelope, xml, 0);
-    fprintf(stderr, "Generated XML: %s\n", xml); // Debug output
     cJSON_Delete(json);
     return xml;
 }
@@ -486,7 +519,11 @@ static const char* nfe_request(const char* operation, const char* soap_payload) 
 
     char* final_payload = (char*)soap_payload;
     if (is_json(soap_payload)) {
-        final_payload = json_to_xml(soap_payload);
+        if (strcmp(operation, "NfeAutorizacao") == 0) {
+            final_payload = json_to_nfe_xml(soap_payload);
+        } else {
+            final_payload = json_to_xml(soap_payload);
+        }
         if (!final_payload) {
             fprintf(stderr, "JSON to XML conversion failed\n");
             free(endpoint);
@@ -521,15 +558,21 @@ static const char* nfe_request(const char* operation, const char* soap_payload) 
         WSACleanup();
         return return_error("Failed to allocate request");
     }
+
+    // Set SOAPAction based on operation
+    const char* soap_action = (strcmp(operation, "NfeAutorizacao") == 0) ?
+        "\"http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote\"" :
+        "\"http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4/nfeStatusServicoNF\"";
+
     sprintf(request,
         "POST /%s HTTP/1.1\r\n"
         "Host: %s\r\n"
         "Content-Type: application/soap+xml; charset=utf-8\r\n"
-        "SOAPAction: \"http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4/nfeStatusServicoNF\"\r\n"
+        "SOAPAction: %s\r\n"
         "Content-Length: %zu\r\n"
         "Connection: close\r\n"
         "\r\n"
-        "%s", path, host, strlen(final_payload), final_payload);
+        "%s", path, host, soap_action, strlen(final_payload), final_payload);
     fprintf(stderr, "HTTP Request: %s\n", request); // Debug output
     free(endpoint);
     if (final_payload != soap_payload) free(final_payload);
@@ -555,7 +598,7 @@ static const char* nfe_request(const char* operation, const char* soap_payload) 
 
     char* response = NULL;
     size_t response_size = 0;
-    char buf[4096];
+    char buf[8192];
     while (1) {
         int read = BIO_read(bio, buf, sizeof(buf));
         if (read > 0) {
@@ -639,4 +682,8 @@ static const char* nfe_request(const char* operation, const char* soap_payload) 
 
 __declspec(dllexport) const char* status_servico(const char* soap_payload) {
     return nfe_request("NfeStatusServico", soap_payload);
+}
+
+__declspec(dllexport) const char* enviar_nfe(const char* soap_payload) {
+    return nfe_request("NfeAutorizacao", soap_payload);
 }
