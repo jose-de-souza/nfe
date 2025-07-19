@@ -30,7 +30,7 @@
             "command": "cmd",
             "args": [
                 "/c",
-                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && cl /D_DEBUG /MDd /Zi /nologo /W3 /D_CRT_SECURE_NO_WARNINGS /I \"C:\\Program Files (x86)\\OpenSSL-Win32\\include\" /I \"${workspaceFolder}\\src\" \"${workspaceFolder}\\src\\libnfe.c\" /link /DLL /MACHINE:X86 /OUT:\"${workspaceFolder}\\build\\libnfe.dll\" /IMPLIB:\"${workspaceFolder}\\build\\libnfe.lib\" /LIBPATH:\"C:\\Program Files (x86)\\OpenSSL-Win32\\lib\\VC\\x86\\MDd\" libcrypto.lib libssl.lib ws2_32.lib"
+                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && cl /D_DEBUG /MDd /Zi /nologo /W3 /D_CRT_SECURE_NO_WARNINGS /I \"C:\\Program Files (x86)\\OpenSSL-Win32\\include\" /I \"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\include\" /I \"${workspaceFolder}\\src\" \"${workspaceFolder}\\src\\libnfe.c\" /link /DLL /MACHINE:X86 /OUT:\"${workspaceFolder}\\build\\libnfe.dll\" /IMPLIB:\"${workspaceFolder}\\build\\libnfe.lib\" /LIBPATH:\"C:\\Program Files (x86)\\OpenSSL-Win32\\lib\\VC\\x86\\MDd\" /LIBPATH:\"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\debug\\lib\" libcrypto.lib libssl.lib ws2_32.lib cjson.lib"
             ],
             "problemMatcher": ["$msCompile"],
             "group": "build",
@@ -42,11 +42,22 @@
             "command": "cmd",
             "args": [
                 "/c",
-                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && cl /D_DEBUG /MDd /Zi /nologo /W3 /D_CRT_SECURE_NO_WARNINGS /I \"${workspaceFolder}\\src\" \"${workspaceFolder}\\test_libnfe.c\" /link /MACHINE:X86 /OUT:\"${workspaceFolder}\\build\\test_libnfe.exe\" /LIBPATH:\"${workspaceFolder}\\build\" \"${workspaceFolder}\\build\\libnfe.lib\" user32.lib"
+                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && cl /D_DEBUG /MDd /Zi /nologo /W3 /D_CRT_SECURE_NO_WARNINGS /I \"${workspaceFolder}\\src\" /I \"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\include\" \"${workspaceFolder}\\test_libnfe.c\" /link /MACHINE:X86 /OUT:\"${workspaceFolder}\\build\\test_libnfe.exe\" /LIBPATH:\"${workspaceFolder}\\build\" /LIBPATH:\"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\debug\\lib\" \"${workspaceFolder}\\build\\libnfe.lib\" user32.lib cjson.lib"
             ],
             "problemMatcher": ["$msCompile"],
             "group": "build",
             "dependsOn": ["Build libnfe"]
+        },
+        {
+            "label": "Build test_json_to_xml",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && cl /D_DEBUG /MDd /Zi /nologo /W3 /D_CRT_SECURE_NO_WARNINGS /I \"${workspaceFolder}\\src\" /I \"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\include\" \"${workspaceFolder}\\test_json_to_xml.c\" /link /MACHINE:X86 /OUT:\"${workspaceFolder}\\build\\test_json_to_xml.exe\" /LIBPATH:\"${workspaceFolder}\\build\" /LIBPATH:\"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\debug\\lib\" cjson.lib"
+            ],
+            "problemMatcher": ["$msCompile"],
+            "group": "build"
         },
         {
             "label": "Copy DLL to libs",

@@ -10,6 +10,7 @@
 #include <openssl/crypto.h>
 #include <openssl/x509.h>
 #include "libnfe.h"
+#include "cJSON.h"
 
 // Environment enum
 typedef enum {
@@ -37,6 +38,120 @@ static const char* return_error(const char* msg) {
     strncpy(response_buffer, msg, sizeof(response_buffer) - 1);
     response_buffer[sizeof(response_buffer) - 1] = '\0';
     return response_buffer;
+}
+
+// Check if input is JSON by looking for '{' as first non-whitespace character
+static int is_json(const char* input) {
+    const char* ptr = input;
+    while (*ptr && isspace(*ptr)) ptr++;
+    return *ptr == '{';
+}
+
+// Helper function to append XML tags
+static void append_xml(cJSON* node, char* buffer, int depth) {
+    if (!node) return;
+
+    // Skip if node is an attribute (starts with '@')
+    if (node->string && strncmp(node->string, "@", 1) == 0) {
+        return;
+    }
+
+    // Determine tag name
+    const char* tag = node->string ? node->string : "root";
+    char* start_tag = (char*)malloc(strlen(tag) + 512);
+    if (!start_tag) {
+        fprintf(stderr, "Failed to allocate start_tag\n");
+        return;
+    }
+    sprintf(start_tag, "<%s", tag);
+
+    // Add attributes
+    cJSON* child = node->child;
+    while (child) {
+        if (child->string && strncmp(child->string, "@", 1) == 0) {
+            char* attr_name = child->string + 1;
+            if (cJSON_IsString(child)) {
+                sprintf(start_tag + strlen(start_tag), " %s=\"%s\"", attr_name, child->valuestring);
+            }
+        }
+        child = child->next;
+    }
+    strcat(start_tag, ">");
+
+    // Append start tag
+    strcat(buffer, start_tag);
+    free(start_tag);
+
+    // Process children
+    child = node->child;
+    int has_non_attr_children = 0;
+    while (child) {
+        if (!child->string || strncmp(child->string, "@", 1) != 0) {
+            has_non_attr_children = 1;
+            if (cJSON_IsObject(child) || cJSON_IsArray(child)) {
+                append_xml(child, buffer, depth + 1);
+            } else if (cJSON_IsString(child)) {
+                strcat(buffer, child->valuestring);
+                char* end_tag = (char*)malloc(strlen(child->string ? child->string : "root") + 4);
+                sprintf(end_tag, "</%s>", child->string ? child->string : "root");
+                strcat(buffer, end_tag);
+                free(end_tag);
+            } else if (cJSON_IsNumber(child)) {
+                char num_str[32];
+                snprintf(num_str, sizeof(num_str), "%g", child->valuedouble);
+                strcat(buffer, num_str);
+                char* end_tag = (char*)malloc(strlen(child->string ? child->string : "root") + 4);
+                sprintf(end_tag, "</%s>", child->string ? child->string : "root");
+                strcat(buffer, end_tag);
+                free(end_tag);
+            }
+        }
+        child = child->next;
+    }
+
+    // Close tag if there are non-attribute children or if the node is empty
+    if (has_non_attr_children || !node->child) {
+        sprintf(buffer + strlen(buffer), "</%s>", tag);
+    } else {
+        // Convert to self-closing tag if only attributes
+        buffer[strlen(buffer) - 1] = '/';
+        strcat(buffer, ">");
+    }
+}
+
+// JSON to XML conversion
+static char* json_to_xml(const char* json_input) {
+    cJSON* json = cJSON_Parse(json_input);
+    if (!json) {
+        fprintf(stderr, "JSON parsing failed: %s\n", cJSON_GetErrorPtr());
+        return NULL;
+    }
+
+    // Buffer for XML output
+    char* xml = (char*)malloc(4096);
+    if (!xml) {
+        cJSON_Delete(json);
+        fprintf(stderr, "Failed to allocate XML buffer\n");
+        return NULL;
+    }
+    xml[0] = '\0';
+
+    // Start XML
+    strcat(xml, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+
+    cJSON* envelope = cJSON_GetObjectItem(json, "soap:Envelope");
+    if (!envelope) {
+        fprintf(stderr, "No soap:Envelope found in JSON\n");
+        free(xml);
+        cJSON_Delete(json);
+        return NULL;
+    }
+
+    // Process the entire envelope
+    append_xml(envelope, xml, 0);
+    fprintf(stderr, "Generated XML: %s\n", xml); // Debug output
+    cJSON_Delete(json);
+    return xml;
 }
 
 // Load configuration from system.cfg
@@ -368,8 +483,30 @@ static const char* nfe_request(const char* operation, const char* soap_payload) 
         return response_buffer;
     }
 
-    char* request = (char*)malloc(strlen(soap_payload) + 256);
+    char* final_payload = (char*)soap_payload;
+    if (is_json(soap_payload)) {
+        final_payload = json_to_xml(soap_payload);
+        if (!final_payload) {
+            fprintf(stderr, "JSON to XML conversion failed\n");
+            free(endpoint);
+            BIO_free_all(bio);
+            X509_free(cert);
+            EVP_PKEY_free(key);
+            PKCS12_free(pfx);
+            BIO_free(pfx_file);
+            SSL_CTX_free(ssl_ctx);
+            OSSL_PROVIDER_unload(default_provider);
+            OSSL_PROVIDER_unload(legacy_provider);
+            free_config(config);
+            WSACleanup();
+            return return_error("JSON to XML conversion failed");
+        }
+        fprintf(stderr, "Sending XML: %s\n", final_payload); // Debug output
+    }
+
+    char* request = (char*)malloc(strlen(final_payload) + 512);
     if (!request) {
+        if (final_payload != soap_payload) free(final_payload);
         free(endpoint);
         BIO_free_all(bio);
         X509_free(cert);
@@ -387,11 +524,14 @@ static const char* nfe_request(const char* operation, const char* soap_payload) 
         "POST /%s HTTP/1.1\r\n"
         "Host: %s\r\n"
         "Content-Type: application/soap+xml; charset=utf-8\r\n"
+        "SOAPAction: \"http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4/nfeStatusServicoNF\"\r\n"
         "Content-Length: %zu\r\n"
         "Connection: close\r\n"
         "\r\n"
-        "%s", path, host, strlen(soap_payload), soap_payload);
+        "%s", path, host, strlen(final_payload), final_payload);
+    fprintf(stderr, "HTTP Request: %s\n", request); // Debug output
     free(endpoint);
+    if (final_payload != soap_payload) free(final_payload);
 
     if (BIO_write(bio, request, (int)strlen(request)) <= 0) {
         char err_buf[256];
