@@ -183,22 +183,43 @@ static int check_nfe_db(const char* nNF, char* key_out, NFeStatus* status_out, c
     int found = 0;
     char line[256];
     while (fgets(line, sizeof(line), file)) {
+        // Remove trailing newline
+        line[strcspn(line, "\r\n")] = 0;
         char* nNF_db = strtok(line, ";");
         char* key_db = strtok(NULL, ";");
         char* status_db = strtok(NULL, ";");
         char* timestamp_db = strtok(NULL, ";");
-        char* cStat_db = strtok(NULL, ";\n");
-        if (!nNF_db || !key_db || !status_db || !timestamp_db || !cStat_db ||
-            strlen(key_db) != 44 || !validate_timestamp(timestamp_db) ||
-            (strcmp(status_db, "EMITIDA") != 0 && strcmp(status_db, "CONTINGENCIA") != 0 &&
-             strcmp(status_db, "INUTILIZADA") != 0 && strcmp(status_db, "EDITANDO") != 0) ||
-            !isdigit(cStat_db[0])) {
-            fclose(file);
-            CloseHandle(hFile);
-            strncpy(error_buffer, "Malformed nfe.db entry", sizeof(error_buffer) - 1);
-            error_buffer[sizeof(error_buffer) - 1] = '\0';
-            fprintf(stderr, "check_nfe_db error: %s\n", error_buffer);
-            return -1;
+        char* cStat_db = strtok(NULL, ";");
+        if (!nNF_db || !key_db || !status_db || !timestamp_db || !cStat_db) {
+            fprintf(stderr, "Skipping incomplete nfe.db entry: %s\n", line);
+            continue; // Skip invalid lines
+        }
+        if ((strlen(key_db) != 47 && strlen(key_db) != 46) || strncmp(key_db, "NFe", 3) != 0) {
+            fprintf(stderr, "Skipping invalid key in nfe.db: %s\n", key_db);
+            continue;
+        }
+        if (!validate_timestamp(timestamp_db)) {
+            fprintf(stderr, "Skipping invalid timestamp in nfe.db: %s\n", timestamp_db);
+            continue;
+        }
+        if (strcmp(status_db, "EMITIDA") != 0 && strcmp(status_db, "CONTINGENCIA") != 0 &&
+            strcmp(status_db, "INUTILIZADA") != 0 && strcmp(status_db, "EDITANDO") != 0) {
+            fprintf(stderr, "Skipping invalid status in nfe.db: %s\n", status_db);
+            continue;
+        }
+        if (!isdigit(cStat_db[0])) {
+            fprintf(stderr, "Skipping invalid cStat in nfe.db: %s\n", cStat_db);
+            continue;
+        }
+        // Validate or fix cDV
+        char key_base[44];
+        strncpy(key_base, key_db + 3, 43);
+        key_base[43] = '\0';
+        char cdv = (strlen(key_db) == 47) ? key_db[46] : '\0';
+        char calculated_cdv = calculate_cdv(key_base);
+        if (strlen(key_db) == 46 || (strlen(key_db) == 47 && cdv != calculated_cdv)) {
+            snprintf(key_db, 48, "NFe%s%c", key_base, calculated_cdv);
+            fprintf(stderr, "Fixed legacy or invalid nfe_key: %s\n", key_db);
         }
         if (strcmp(nNF_db, nNF) == 0) {
             strcpy(key_out, key_db);
@@ -232,7 +253,8 @@ static int update_nfe_db(const char* nNF, const char* key, NFeStatus status, con
 
     HANDLE hFile = CreateFile(db_path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     FILE* file = NULL;
-    if (hFile != INVALID_HANDLE_VALUE) {
+    int file_exists = (hFile != INVALID_HANDLE_VALUE);
+    if (file_exists) {
         file = _fdopen(_open_osfhandle((intptr_t)hFile, _O_RDONLY | _O_TEXT), "r");
         if (!file) {
             CloseHandle(hFile);
@@ -268,28 +290,46 @@ static int update_nfe_db(const char* nNF, const char* key, NFeStatus status, con
     }
 
     int updated = 0;
-    char line[256];
     if (file) {
+        char line[256];
         while (fgets(line, sizeof(line), file)) {
+            // Remove trailing newline
+            line[strcspn(line, "\r\n")] = 0;
             char* nNF_db = strtok(line, ";");
             char* key_db = strtok(NULL, ";");
             char* status_db = strtok(NULL, ";");
             char* timestamp_db = strtok(NULL, ";");
-            char* cStat_db = strtok(NULL, ";\n");
-            if (!nNF_db || !key_db || !status_db || !timestamp_db || !cStat_db ||
-                strlen(key_db) != 44 || !validate_timestamp(timestamp_db) ||
-                (strcmp(status_db, "EMITIDA") != 0 && strcmp(status_db, "CONTINGENCIA") != 0 &&
-                 strcmp(status_db, "INUTILIZADA") != 0 && strcmp(status_db, "EDITANDO") != 0) ||
-                !isdigit(cStat_db[0])) {
-                fclose(file);
-                fclose(temp);
-                CloseHandle(hFile);
-                CloseHandle(hTemp);
-                remove(temp_path);
-                strncpy(error_buffer, "Malformed nfe.db entry", sizeof(error_buffer) - 1);
-                error_buffer[sizeof(error_buffer) - 1] = '\0';
-                fprintf(stderr, "update_nfe_db error: %s\n", error_buffer);
-                return -1;
+            char* cStat_db = strtok(NULL, ";");
+            if (!nNF_db || !key_db || !status_db || !timestamp_db || !cStat_db) {
+                fprintf(stderr, "Skipping incomplete nfe.db entry: %s\n", line);
+                continue; // Skip invalid lines
+            }
+            if ((strlen(key_db) != 47 && strlen(key_db) != 46) || strncmp(key_db, "NFe", 3) != 0) {
+                fprintf(stderr, "Skipping invalid key in nfe.db: %s\n", key_db);
+                continue;
+            }
+            if (!validate_timestamp(timestamp_db)) {
+                fprintf(stderr, "Skipping invalid timestamp in nfe.db: %s\n", timestamp_db);
+                continue;
+            }
+            if (strcmp(status_db, "EMITIDA") != 0 && strcmp(status_db, "CONTINGENCIA") != 0 &&
+                strcmp(status_db, "INUTILIZADA") != 0 && strcmp(status_db, "EDITANDO") != 0) {
+                fprintf(stderr, "Skipping invalid status in nfe.db: %s\n", status_db);
+                continue;
+            }
+            if (!isdigit(cStat_db[0])) {
+                fprintf(stderr, "Skipping invalid cStat in nfe.db: %s\n", cStat_db);
+                continue;
+            }
+            // Validate or fix cDV
+            char key_base[44];
+            strncpy(key_base, key_db + 3, 43);
+            key_base[43] = '\0';
+            char cdv = (strlen(key_db) == 47) ? key_db[46] : '\0';
+            char calculated_cdv = calculate_cdv(key_base);
+            if (strlen(key_db) == 46 || (strlen(key_db) == 47 && cdv != calculated_cdv)) {
+                snprintf(key_db, 48, "NFe%s%c", key_base, calculated_cdv);
+                fprintf(stderr, "Fixed legacy or invalid nfe_key: %s\n", key_db);
             }
             if (nNF_db && strcmp(nNF_db, nNF) == 0) {
                 const char* status_str = (status == STATUS_EMITIDA) ? "EMITIDA" :
@@ -298,7 +338,7 @@ static int update_nfe_db(const char* nNF, const char* key, NFeStatus status, con
                 fprintf(temp, "%s;%s;%s;%s;%s\n", nNF, key, status_str, timestamp, cStat);
                 updated = 1;
             } else {
-                fputs(line, temp);
+                fprintf(temp, "%s;%s;%s;%s;%s\n", nNF_db, key_db, status_db, timestamp_db, cStat_db);
             }
         }
         fclose(file);
@@ -314,7 +354,9 @@ static int update_nfe_db(const char* nNF, const char* key, NFeStatus status, con
 
     fclose(temp);
     CloseHandle(hTemp);
-    remove(db_path);
+    if (file_exists) {
+        remove(db_path);
+    }
     rename(temp_path, db_path);
     fprintf(stderr, "nfe.db updated successfully\n");
     return 0;
@@ -359,7 +401,10 @@ char* json_to_nfe_xml(const char* json_input) {
 
     _mkdir("C:\\madeiras\\erp\\db");
 
-    char nfe_key[45] = {0};
+    char timestamp[20];
+    get_current_timestamp(timestamp, sizeof(timestamp));
+
+    char nfe_key[48] = {0}; // 47 chars + null terminator
     char cStat[16] = "225";
     NFeStatus status = STATUS_EDITANDO;
     int db_exists = check_nfe_db(nNF->valuestring, nfe_key, &status, cStat);
@@ -369,6 +414,8 @@ char* json_to_nfe_xml(const char* json_input) {
         return NULL;
     }
 
+    char cNF[9] = {0};
+    char cdv = '0';
     if (!db_exists) {
         HANDLE hFile = CreateFile("C:\\madeiras\\erp\\db\\nfe.db", GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         int is_empty = 1;
@@ -387,7 +434,6 @@ char* json_to_nfe_xml(const char* json_input) {
             }
         }
 
-        char cNF[9];
         snprintf(cNF, sizeof(cNF), "%08d", rand() % 100000000);
         fprintf(stderr, "Generated cNF: %s\n", cNF);
         char serie_padded[4];
@@ -412,7 +458,7 @@ char* json_to_nfe_xml(const char* json_input) {
                 return NULL;
             }
         }
-        char cdv = calculate_cdv(key_base);
+        cdv = calculate_cdv(key_base);
         if (!isdigit(cdv)) {
             fprintf(stderr, "Invalid cDV generated: %c\n", cdv);
             cJSON_Delete(json);
@@ -436,36 +482,25 @@ char* json_to_nfe_xml(const char* json_input) {
             cJSON_AddStringToObject(ide, "cDV", cdv_str);
         }
 
-        if (hFile == INVALID_HANDLE_VALUE || is_empty) {
-            hFile = CreateFile("C:\\madeiras\\erp\\db\\nfe.db", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-            if (hFile == INVALID_HANDLE_VALUE) {
-                fprintf(stderr, "Failed to create nfe.db: %lu\n", GetLastError());
-                cJSON_Delete(json);
-                return NULL;
-            }
-            FILE* file = _fdopen(_open_osfhandle((intptr_t)hFile, _O_WRONLY | _O_TEXT), "w");
-            if (!file) {
-                CloseHandle(hFile);
-                fprintf(stderr, "Failed to open nfe.db for writing: %lu\n", GetLastError());
-                cJSON_Delete(json);
-                return NULL;
-            }
-            char timestamp[20];
-            get_current_timestamp(timestamp, sizeof(timestamp));
-            fprintf(file, "%s;%s;EDITANDO;%s;225\n", nNF->valuestring, nfe_key, timestamp);
-            fclose(file);
-            CloseHandle(hFile);
-            fprintf(stderr, "Created new nfe.db with record: %s;%s;EDITANDO;%s;225\n", nNF->valuestring, nfe_key, timestamp);
+        FILE* db_file = fopen("C:\\madeiras\\erp\\db\\nfe.db", is_empty ? "w" : "a");
+        if (!db_file) {
+            fprintf(stderr, "Failed to open nfe.db for writing: %lu\n", GetLastError());
+            cJSON_Delete(json);
+            return NULL;
         }
+        fprintf(db_file, "%s;%s;EDITANDO;%s;225\n", nNF->valuestring, nfe_key, timestamp);
+        fclose(db_file);
+        fprintf(stderr, "Created new nfe.db with record: %s;%s;EDITANDO;%s;225\n", nNF->valuestring, nfe_key, timestamp);
     } else {
         fprintf(stderr, "Reusing existing key: %s\n", nfe_key);
-    }
-
-    if (nfe_key[0] != '\0') {
-        char cNF[9];
-        strncpy(cNF, nfe_key + 35, 8);
+        if (strlen(nfe_key) != 47 || strncmp(nfe_key, "NFe", 3) != 0) {
+            fprintf(stderr, "Invalid existing nfe_key: %s\n", nfe_key);
+            cJSON_Delete(json);
+            return NULL;
+        }
+        strncpy(cNF, nfe_key + 36, 8);
         cNF[8] = '\0';
-        char cdv = nfe_key[43];
+        cdv = nfe_key[46];
         cJSON* cNF_node = cJSON_GetObjectItem(ide, "cNF");
         if (cNF_node) {
             cJSON_SetValuestring(cNF_node, cNF);
@@ -480,6 +515,12 @@ char* json_to_nfe_xml(const char* json_input) {
             char cdv_str[2] = {cdv, '\0'};
             cJSON_AddStringToObject(ide, "cDV", cdv_str);
         }
+    }
+
+    if (update_nfe_db(nNF->valuestring, nfe_key, STATUS_EDITANDO, cStat) != 0) {
+        fprintf(stderr, "update_nfe_db error: %s\n", error_buffer);
+        cJSON_Delete(json);
+        return NULL;
     }
 
     char* xml = (char*)malloc(16384);
@@ -502,18 +543,33 @@ char* json_to_nfe_xml(const char* json_input) {
 
     cJSON* child = json->child;
     while (child) {
-        append_xml(child, xml, 0);
+        if (strcmp(child->string, "det") == 0 || strcmp(child->string, "detPag") == 0) {
+            // Handle arrays without wrapping in <root>
+            cJSON* item = child->child;
+            while (item) {
+                if (strcmp(child->string, "det") == 0) {
+                    char det_tag[32];
+                    snprintf(det_tag, sizeof(det_tag), "<det nItem=\"%s\">", cJSON_GetObjectItem(item, "nItem")->valuestring);
+                    strcat(xml, det_tag);
+                    cJSON* prod = cJSON_GetObjectItem(item, "prod");
+                    if (prod) append_xml(prod, xml, 0);
+                    cJSON* imposto = cJSON_GetObjectItem(item, "imposto");
+                    if (imposto) append_xml(imposto, xml, 0);
+                    strcat(xml, "</det>");
+                } else if (strcmp(child->string, "detPag") == 0) {
+                    strcat(xml, "<detPag>");
+                    append_xml(item, xml, 0);
+                    strcat(xml, "</detPag>");
+                }
+                item = item->next;
+            }
+        } else {
+            append_xml(child, xml, 0);
+        }
         child = child->next;
     }
 
     strcat(xml, "</infNFe></NFe></enviNFe></nfeDadosMsg></soap:Body></soap:Envelope>");
-
-    if (update_nfe_db(nNF->valuestring, nfe_key, STATUS_EDITANDO, cStat) != 0) {
-        fprintf(stderr, "update_nfe_db error: %s\n", error_buffer);
-        free(xml);
-        cJSON_Delete(json);
-        return NULL;
-    }
 
     fprintf(stderr, "Generated XML: %s\n", xml);
     cJSON_Delete(json);
@@ -867,7 +923,7 @@ static const char* nfe_request(const char* operation, const char* soap_payload) 
                 if (ide) {
                     cJSON* nNF = cJSON_GetObjectItem(ide, "nNF");
                     if (nNF && cJSON_IsString(nNF)) {
-                        char nfe_key[45] = {0};
+                        char nfe_key[48] = {0};
                         char cStat[16] = "0";
                         NFeStatus status;
                         if (check_nfe_db(nNF->valuestring, nfe_key, &status, cStat) > 0) {
@@ -905,7 +961,7 @@ static const char* nfe_request(const char* operation, const char* soap_payload) 
                 if (ide) {
                     cJSON* nNF = cJSON_GetObjectItem(ide, "nNF");
                     if (nNF && cJSON_IsString(nNF)) {
-                        char nfe_key[45] = {0};
+                        char nfe_key[48] = {0};
                         char cStat[16] = "0";
                         NFeStatus status;
                         if (check_nfe_db(nNF->valuestring, nfe_key, &status, cStat) > 0) {
@@ -1002,7 +1058,7 @@ static const char* nfe_request(const char* operation, const char* soap_payload) 
                 if (ide) {
                     cJSON* nNF = cJSON_GetObjectItem(ide, "nNF");
                     if (nNF && cJSON_IsString(nNF)) {
-                        char nfe_key[45] = {0};
+                        char nfe_key[48] = {0};
                         char cStat[16] = "0";
                         NFeStatus status;
                         if (check_nfe_db(nNF->valuestring, nfe_key, &status, cStat) > 0) {
@@ -1070,7 +1126,7 @@ static const char* nfe_request(const char* operation, const char* soap_payload) 
                     if (ide) {
                         cJSON* nNF = cJSON_GetObjectItem(ide, "nNF");
                         if (nNF && cJSON_IsString(nNF)) {
-                            char nfe_key[45] = {0};
+                            char nfe_key[48] = {0};
                             char cStat[16] = "0";
                             NFeStatus status;
                             if (check_nfe_db(nNF->valuestring, nfe_key, &status, cStat) > 0) {
@@ -1126,7 +1182,7 @@ static const char* nfe_request(const char* operation, const char* soap_payload) 
             if (ide) {
                 cJSON* nNF = cJSON_GetObjectItem(ide, "nNF");
                 if (nNF && cJSON_IsString(nNF)) {
-                    char nfe_key[45] = {0};
+                    char nfe_key[48] = {0};
                     char cStat[16] = "0";
                     NFeStatus status;
                     if (check_nfe_db(nNF->valuestring, nfe_key, &status, cStat) > 0) {
