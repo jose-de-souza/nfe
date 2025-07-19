@@ -519,7 +519,7 @@ static const char* nfe_request(const char* operation, const char* soap_payload) 
 
     char* final_payload = (char*)soap_payload;
     if (is_json(soap_payload)) {
-        if (strcmp(operation, "NfeAutorizacao") == 0) {
+        if (strcmp(operation, "NFeAutorizacao") == 0) {
             final_payload = json_to_nfe_xml(soap_payload);
         } else {
             final_payload = json_to_xml(soap_payload);
@@ -560,7 +560,7 @@ static const char* nfe_request(const char* operation, const char* soap_payload) 
     }
 
     // Set SOAPAction based on operation
-    const char* soap_action = (strcmp(operation, "NfeAutorizacao") == 0) ?
+    const char* soap_action = (strcmp(operation, "NFeAutorizacao") == 0) ?
         "\"http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote\"" :
         "\"http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4/nfeStatusServicoNF\"";
 
@@ -685,5 +685,5 @@ __declspec(dllexport) const char* status_servico(const char* soap_payload) {
 }
 
 __declspec(dllexport) const char* enviar_nfe(const char* soap_payload) {
-    return nfe_request("NfeAutorizacao", soap_payload);
+    return nfe_request("NFeAutorizacao", soap_payload);
 }
