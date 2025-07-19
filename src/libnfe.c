@@ -541,33 +541,102 @@ char* json_to_nfe_xml(const char* json_input) {
     snprintf(infNFe_tag, sizeof(infNFe_tag), "<infNFe versao=\"4.00\" Id=\"%s\">", nfe_key);
     strcat(xml, infNFe_tag);
 
+    // Explicitly handle <ide> to enforce schema order
+    strcat(xml, "<ide>");
+    cJSON* cUF_node = cJSON_GetObjectItem(ide, "cUF");
+    if (cUF_node && cJSON_IsString(cUF_node)) { strcat(xml, "<cUF>"); strcat(xml, cUF_node->valuestring); strcat(xml, "</cUF>"); }
+    cJSON* cNF_node = cJSON_GetObjectItem(ide, "cNF");
+    if (cNF_node && cJSON_IsString(cNF_node)) { strcat(xml, "<cNF>"); strcat(xml, cNF_node->valuestring); strcat(xml, "</cNF>"); }
+    cJSON* natOp_node = cJSON_GetObjectItem(ide, "natOp");
+    if (natOp_node && cJSON_IsString(natOp_node)) { strcat(xml, "<natOp>"); strcat(xml, natOp_node->valuestring); strcat(xml, "</natOp>"); }
+    cJSON* mod_node = cJSON_GetObjectItem(ide, "mod");
+    if (mod_node && cJSON_IsString(mod_node)) { strcat(xml, "<mod>"); strcat(xml, mod_node->valuestring); strcat(xml, "</mod>"); }
+    cJSON* serie_node = cJSON_GetObjectItem(ide, "serie");
+    if (serie_node && cJSON_IsString(serie_node)) { strcat(xml, "<serie>"); strcat(xml, serie_node->valuestring); strcat(xml, "</serie>"); }
+    cJSON* nNF_node = cJSON_GetObjectItem(ide, "nNF");
+    if (nNF_node && cJSON_IsString(nNF_node)) { strcat(xml, "<nNF>"); strcat(xml, nNF_node->valuestring); strcat(xml, "</nNF>"); }
+    cJSON* dhEmi_node = cJSON_GetObjectItem(ide, "dhEmi");
+    if (dhEmi_node && cJSON_IsString(dhEmi_node)) { strcat(xml, "<dhEmi>"); strcat(xml, dhEmi_node->valuestring); strcat(xml, "</dhEmi>"); }
+    cJSON* dhSaiEnt_node = cJSON_GetObjectItem(ide, "dhSaiEnt");
+    if (dhSaiEnt_node && cJSON_IsString(dhSaiEnt_node)) { strcat(xml, "<dhSaiEnt>"); strcat(xml, dhSaiEnt_node->valuestring); strcat(xml, "</dhSaiEnt>"); }
+    cJSON* tpNF_node = cJSON_GetObjectItem(ide, "tpNF");
+    if (tpNF_node && cJSON_IsString(tpNF_node)) { strcat(xml, "<tpNF>"); strcat(xml, tpNF_node->valuestring); strcat(xml, "</tpNF>"); }
+    cJSON* idDest_node = cJSON_GetObjectItem(ide, "idDest");
+    if (idDest_node && cJSON_IsString(idDest_node)) { strcat(xml, "<idDest>"); strcat(xml, idDest_node->valuestring); strcat(xml, "</idDest>"); }
+    cJSON* cMunFG_node = cJSON_GetObjectItem(ide, "cMunFG");
+    if (cMunFG_node && cJSON_IsString(cMunFG_node)) { strcat(xml, "<cMunFG>"); strcat(xml, cMunFG_node->valuestring); strcat(xml, "</cMunFG>"); }
+    cJSON* tpImp_node = cJSON_GetObjectItem(ide, "tpImp");
+    if (tpImp_node && cJSON_IsString(tpImp_node)) { strcat(xml, "<tpImp>"); strcat(xml, tpImp_node->valuestring); strcat(xml, "</tpImp>"); }
+    cJSON* tpEmis_node = cJSON_GetObjectItem(ide, "tpEmis");
+    if (tpEmis_node && cJSON_IsString(tpEmis_node)) { strcat(xml, "<tpEmis>"); strcat(xml, tpEmis_node->valuestring); strcat(xml, "</tpEmis>"); }
+    cJSON* cDV_node = cJSON_GetObjectItem(ide, "cDV");
+    if (cDV_node && cJSON_IsString(cDV_node)) { strcat(xml, "<cDV>"); strcat(xml, cDV_node->valuestring); strcat(xml, "</cDV>"); }
+    cJSON* tpAmb_node = cJSON_GetObjectItem(ide, "tpAmb");
+    if (tpAmb_node && cJSON_IsString(tpAmb_node)) { strcat(xml, "<tpAmb>"); strcat(xml, tpAmb_node->valuestring); strcat(xml, "</tpAmb>"); }
+    cJSON* finNFe_node = cJSON_GetObjectItem(ide, "finNFe");
+    if (finNFe_node && cJSON_IsString(finNFe_node)) { strcat(xml, "<finNFe>"); strcat(xml, finNFe_node->valuestring); strcat(xml, "</finNFe>"); }
+    cJSON* indFinal_node = cJSON_GetObjectItem(ide, "indFinal");
+    if (indFinal_node && cJSON_IsString(indFinal_node)) { strcat(xml, "<indFinal>"); strcat(xml, indFinal_node->valuestring); strcat(xml, "</indFinal>"); }
+    cJSON* indPres_node = cJSON_GetObjectItem(ide, "indPres");
+    if (indPres_node && cJSON_IsString(indPres_node)) { strcat(xml, "<indPres>"); strcat(xml, indPres_node->valuestring); strcat(xml, "</indPres>"); }
+    cJSON* indIntermed_node = cJSON_GetObjectItem(ide, "indIntermed");
+    if (indIntermed_node && cJSON_IsString(indIntermed_node)) { strcat(xml, "<indIntermed>"); strcat(xml, indIntermed_node->valuestring); strcat(xml, "</indIntermed>"); }
+    cJSON* procEmi_node = cJSON_GetObjectItem(ide, "procEmi");
+    if (procEmi_node && cJSON_IsString(procEmi_node)) { strcat(xml, "<procEmi>"); strcat(xml, procEmi_node->valuestring); strcat(xml, "</procEmi>"); }
+    cJSON* verProc_node = cJSON_GetObjectItem(ide, "verProc");
+    if (verProc_node && cJSON_IsString(verProc_node)) { strcat(xml, "<verProc>"); strcat(xml, verProc_node->valuestring); strcat(xml, "</verProc>"); }
+    cJSON* dhCont_node = cJSON_GetObjectItem(ide, "dhCont");
+    if (dhCont_node && cJSON_IsString(dhCont_node)) { strcat(xml, "<dhCont>"); strcat(xml, dhCont_node->valuestring); strcat(xml, "</dhCont>"); }
+    cJSON* xJust_node = cJSON_GetObjectItem(ide, "xJust");
+    if (xJust_node && cJSON_IsString(xJust_node)) { strcat(xml, "<xJust>"); strcat(xml, xJust_node->valuestring); strcat(xml, "</xJust>"); }
+    strcat(xml, "</ide>");
+
     cJSON* child = json->child;
     while (child) {
-        if (strcmp(child->string, "det") == 0 || strcmp(child->string, "detPag") == 0) {
-            // Handle arrays without wrapping in <root>
-            cJSON* item = child->child;
-            while (item) {
-                if (strcmp(child->string, "det") == 0) {
-                    char det_tag[32];
-                    snprintf(det_tag, sizeof(det_tag), "<det nItem=\"%s\">", cJSON_GetObjectItem(item, "nItem")->valuestring);
-                    strcat(xml, det_tag);
-                    cJSON* prod = cJSON_GetObjectItem(item, "prod");
-                    if (prod) append_xml(prod, xml, 0);
-                    cJSON* imposto = cJSON_GetObjectItem(item, "imposto");
-                    if (imposto) append_xml(imposto, xml, 0);
-                    strcat(xml, "</det>");
-                } else if (strcmp(child->string, "detPag") == 0) {
-                    strcat(xml, "<detPag>");
-                    append_xml(item, xml, 0);
-                    strcat(xml, "</detPag>");
-                }
-                item = item->next;
-            }
-        } else {
+        if (strcmp(child->string, "ide") != 0 && strcmp(child->string, "det") != 0 && strcmp(child->string, "detPag") != 0) {
             append_xml(child, xml, 0);
         }
         child = child->next;
     }
+
+    cJSON* det = cJSON_GetObjectItem(json, "det");
+    if (det) {
+        cJSON* item = det->child;
+        while (item) {
+            char det_tag[32];
+            snprintf(det_tag, sizeof(det_tag), "<det nItem=\"%s\">", cJSON_GetObjectItem(item, "nItem")->valuestring);
+            strcat(xml, det_tag);
+            cJSON* prod = cJSON_GetObjectItem(item, "prod");
+            if (prod) append_xml(prod, xml, 0);
+            cJSON* imposto = cJSON_GetObjectItem(item, "imposto");
+            if (imposto) append_xml(imposto, xml, 0);
+            strcat(xml, "</det>");
+            item = item->next;
+        }
+    }
+
+    cJSON* pag = cJSON_GetObjectItem(json, "pag");
+    if (pag) {
+        strcat(xml, "<pag>");
+        cJSON* detPag = cJSON_GetObjectItem(pag, "detPag");
+        if (detPag) {
+            cJSON* item = detPag->child;
+            while (item) {
+                strcat(xml, "<detPag>");
+                append_xml(item, xml, 0);
+                strcat(xml, "</detPag>");
+                item = item->next;
+            }
+        }
+        strcat(xml, "</pag>");
+    }
+
+    cJSON* total = cJSON_GetObjectItem(json, "total");
+    if (total) append_xml(total, xml, 0);
+    cJSON* transp = cJSON_GetObjectItem(json, "transp");
+    if (transp) append_xml(transp, xml, 0);
+    cJSON* infAdic = cJSON_GetObjectItem(json, "infAdic");
+    if (infAdic) append_xml(infAdic, xml, 0);
 
     strcat(xml, "</infNFe></NFe></enviNFe></nfeDadosMsg></soap:Body></soap:Envelope>");
 
