@@ -3,9 +3,8 @@
         {
             "name": "Win32",
             "includePath": [
-                "${workspaceFolder}/src",
-                "C:/Program Files (x86)/OpenSSL-Win32/include",
-                "C:/Users/jose.DE-SOUZA/Softdev/tools/vcpkg/installed/x86-windows/include"
+                "${workspaceFolder}/src/client-side",
+                "C:/Program Files (x86)/OpenSSL-Win32/include"
             ],
             "defines": [
                 "_DEBUG",

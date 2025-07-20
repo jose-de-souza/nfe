@@ -2,13 +2,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug test_libnfe (32-bit)",
+            "name": "Debug Deployed test_libnfe",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}\\build\\test_libnfe.exe",
+            "program": "C:\\madeiras\\erp\\test_libnfe.exe",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}\\build",
+            "cwd": "C:\\madeiras\\erp",
             "environment": [
                 {
                     "name": "OPENSSL_MODULES",
