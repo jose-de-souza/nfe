@@ -4,31 +4,45 @@
         {
             "label": "Build: libnfe.dll",
             "type": "shell",
-            "command": "cmd",
+            "command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat",
             "args": [
-                "/c",
-                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && cl /D_DEBUG /MDd /Zi /nologo /W3 /D_CRT_SECURE_NO_WARNINGS /I \"${workspaceFolder}\\src\\client-side\" /I \"C:\\Program Files (x86)\\OpenSSL-Win32\\include\" \"${workspaceFolder}\\src\\client-side\\libnfe.c\" \"${workspaceFolder}\\src\\client-side\\cJSON.c\" /link /DLL /MACHINE:X86 /OUT:\"${workspaceFolder}\\build\\libnfe.dll\" /IMPLIB:\"${workspaceFolder}\\build\\libnfe.lib\""
+                "&&",
+                "cl.exe",
+                "/D_DEBUG", "/MDd", "/Zi", "/nologo", "/W3", "/D_CRT_SECURE_NO_WARNINGS",
+                "/I", "${workspaceFolder}\\src\\client-side",
+                "/I", "C:\\Program Files (x86)\\OpenSSL-Win32\\include",
+                "/I", "C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\include",
+                "${workspaceFolder}\\src\\client-side\\libnfe.c",
+                "/link", "/DLL", "/MACHINE:X86",
+                "/OUT:${workspaceFolder}\\build\\libnfe.dll",
+                "/IMPLIB:${workspaceFolder}\\build\\libnfe.lib",
+                "/LIBPATH:C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\debug\\lib",
+                "cjson.lib"
             ],
-            "problemMatcher": [
-                "$msCompile"
-            ],
+            "problemMatcher": ["$msCompile"],
             "group": "build"
         },
         {
             "label": "Build: test_libnfe.exe",
             "type": "shell",
-            "command": "cmd",
+            "command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat",
             "args": [
-                "/c",
-                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && cl /D_DEBUG /MDd /Zi /nologo /W3 /D_CRT_SECURE_NO_WARNINGS /I \"${workspaceFolder}\\src\\client-side\" \"${workspaceFolder}\\src\\test\\test_libnfe.c\" /link /MACHINE:X86 /OUT:\"${workspaceFolder}\\build\\test_libnfe.exe\" /LIBPATH:\"${workspaceFolder}\\build\" \"${workspaceFolder}\\build\\libnfe.lib\""
+                "&&",
+                "cl.exe",
+                "/D_DEBUG", "/MDd", "/Zi", "/nologo", "/W3", "/D_CRT_SECURE_NO_WARNINGS",
+                "/I", "${workspaceFolder}\\src\\client-side",
+                "/I", "C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\include",
+                "${workspaceFolder}\\src\\test\\test_libnfe.c",
+                "/link", "/MACHINE:X86",
+                "/OUT:${workspaceFolder}\\build\\test_libnfe.exe",
+                "/LIBPATH:${workspaceFolder}\\build",
+                "/LIBPATH:C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\debug\\lib",
+                "libnfe.lib",
+                "cjson.lib"
             ],
-            "problemMatcher": [
-                "$msCompile"
-            ],
+            "problemMatcher": ["$msCompile"],
             "group": "build",
-            "dependsOn": [
-                "Build: libnfe.dll"
-            ]
+            "dependsOn": ["Build: libnfe.dll"]
         },
         {
             "label": "Deploy: Create Directories",

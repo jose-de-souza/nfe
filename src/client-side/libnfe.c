@@ -4,29 +4,27 @@
 #include <ctype.h>
 #include <winsock2.h>
 #include <windows.h>
-#include <oleauto.h> // For BSTR functions
+#include <oleauto.h> 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>
 #include <openssl/pkcs12.h>
 #include <openssl/provider.h>
-#include <shlwapi.h> // For PathRemoveFileSpecA
+#include <shlwapi.h> 
 
-#include "cJSON.h"  // For JSON manipulation
-#include "libnfe.h" // Header for exported functions
+#include "cJSON.h"
+#include "libnfe.h"
 
-#pragma comment(lib, "shlwapi.lib") // For Path... functions
-#pragma comment(lib, "ws2_32.lib")   // For Winsock functions
-#pragma comment(lib, "oleaut32.lib")// For BSTR functions
+#pragma comment(lib, "shlwapi.lib") 
+#pragma comment(lib, "ws2_32.lib")   
+#pragma comment(lib, "oleaut32.lib")
 
-// --- Configuration Structures ---
 typedef struct {
     char* certificate_path;
     char* certificate_pass;
     char* cacerts_path;
     char* sefaz;
     int   environment;
-    // Specific endpoints
     char* url_nfe_inutilizacao;
     char* url_nfe_consulta_protocolo;
     char* url_nfe_status_servico;
@@ -37,9 +35,8 @@ typedef struct {
 } Config;
 
 static HMODULE hModule_this_dll = NULL;
-static BSTR g_bstr_response = NULL; // Static BSTR to hold the last response
+static BSTR g_bstr_response = NULL; 
 
-// --- DLL Main ---
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
     if (fdwReason == DLL_PROCESS_ATTACH) {
         hModule_this_dll = hinstDLL;
@@ -52,7 +49,6 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
     return TRUE;
 }
 
-// --- Helper Functions ---
 static BSTR char_to_bstr(const char* utf8_str) {
     if (!utf8_str) return NULL;
     int w_len = MultiByteToWideChar(CP_UTF8, 0, utf8_str, -1, NULL, 0);
@@ -91,10 +87,9 @@ static Config* load_config() {
         fprintf(stderr, "ERROR: Failed to get DLL module path.\n"); return NULL;
     }
     
-    // app_home_dir is the parent of the DLL's directory (e.g., C:\madeiras\erp)
     strncpy(app_home_dir, dll_path, MAX_PATH);
-    PathRemoveFileSpecA(app_home_dir); // Removes libnfe.dll -> C:\madeiras\erp\libs
-    PathRemoveFileSpecA(app_home_dir); // Removes libs -> C:\madeiras\erp
+    PathRemoveFileSpecA(app_home_dir); 
+    PathRemoveFileSpecA(app_home_dir); 
     
     snprintf(config_path, MAX_PATH, "%s\\cfg\\libnfe.cfg", app_home_dir);
     
@@ -138,7 +133,6 @@ static Config* load_config() {
     return config;
 }
 
-// --- Core Logic ---
 static BSTR nfe_service_request(const char* service_url, const Config* config, const char* user_payload) {
     if (!service_url) return return_error("Service URL for this operation is not defined in libnfe.cfg");
 
@@ -201,20 +195,60 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     return g_bstr_response;
 }
 
-// --- Exported Functions ---
-#define IMPLEMENT_NFE_FUNCTION(func_name, url_field) \
-__declspec(dllexport) BSTR func_name(const char* json_payload) { \
-    Config* config = load_config(); \
-    if (!config) return return_error("Failed to load or parse libnfe.cfg."); \
-    BSTR response = nfe_service_request(config->url_field, config, json_payload); \
-    free_config(config); \
-    return response; \
+// --- Exported Functions (Explicitly Implemented) ---
+
+__declspec(dllexport) BSTR NfeInutilizacao(const char* json_payload) {
+    Config* config = load_config();
+    if (!config) return return_error("Failed to load or parse libnfe.cfg.");
+    BSTR response = nfe_service_request(config->url_nfe_inutilizacao, config, json_payload);
+    free_config(config);
+    return response;
 }
 
-IMPLEMENT_NFE_FUNCTION(NfeInutilizacao, url_nfe_inutilizacao)
-IMPLEMENT_NFE_FUNCTION(NfeConsultaProtocolo, url_nfe_consulta_protocolo)
-IMPLEMENT_NFE_FUNCTION(NfeStatusServico, url_nfe_status_servico)
-IMPLEMENT_NFE_FUNCTION(NfeConsultaCadastro, url_nfe_consulta_cadastro)
-IMPLEMENT_NFE_FUNCTION(RecepcaoEvento, url_recepcao_evento)
-IMPLEMENT_NFE_FUNCTION(NFeAutorizacao, url_nfe_autorizacao)
-IMPLEMENT_NFE_FUNCTION(NFeRetAutorizacao, url_nfe_ret_autorizacao)
+__declspec(dllexport) BSTR NfeConsultaProtocolo(const char* json_payload) {
+    Config* config = load_config();
+    if (!config) return return_error("Failed to load or parse libnfe.cfg.");
+    BSTR response = nfe_service_request(config->url_nfe_consulta_protocolo, config, json_payload);
+    free_config(config);
+    return response;
+}
+
+__declspec(dllexport) BSTR NfeStatusServico(const char* json_payload) {
+    Config* config = load_config();
+    if (!config) return return_error("Failed to load or parse libnfe.cfg.");
+    BSTR response = nfe_service_request(config->url_nfe_status_servico, config, json_payload);
+    free_config(config);
+    return response;
+}
+
+__declspec(dllexport) BSTR NfeConsultaCadastro(const char* json_payload) {
+    Config* config = load_config();
+    if (!config) return return_error("Failed to load or parse libnfe.cfg.");
+    BSTR response = nfe_service_request(config->url_nfe_consulta_cadastro, config, json_payload);
+    free_config(config);
+    return response;
+}
+
+__declspec(dllexport) BSTR RecepcaoEvento(const char* json_payload) {
+    Config* config = load_config();
+    if (!config) return return_error("Failed to load or parse libnfe.cfg.");
+    BSTR response = nfe_service_request(config->url_recepcao_evento, config, json_payload);
+    free_config(config);
+    return response;
+}
+
+__declspec(dllexport) BSTR NFeAutorizacao(const char* json_payload) {
+    Config* config = load_config();
+    if (!config) return return_error("Failed to load or parse libnfe.cfg.");
+    BSTR response = nfe_service_request(config->url_nfe_autorizacao, config, json_payload);
+    free_config(config);
+    return response;
+}
+
+__declspec(dllexport) BSTR NFeRetAutorizacao(const char* json_payload) {
+    Config* config = load_config();
+    if (!config) return return_error("Failed to load or parse libnfe.cfg.");
+    BSTR response = nfe_service_request(config->url_nfe_ret_autorizacao, config, json_payload);
+    free_config(config);
+    return response;
+}
