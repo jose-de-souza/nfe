@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug test_libnfe (32-bit)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}\\build\\test_libnfe.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}\\build",
+            "environment": [
+                {
+                    "name": "OPENSSL_MODULES",
+                    "value": "C:\\madeiras\\erp\\libs"
+                },
+                {
+                    "name": "PATH",
+                    "value": "${env:PATH};C:\\madeiras\\erp\\libs;C:\\Program Files (x86)\\OpenSSL-Win32\\bin"
+                }
+            ],
+            "console": "externalTerminal",
+            "preLaunchTask": "build"
+        }
+    ]
+}

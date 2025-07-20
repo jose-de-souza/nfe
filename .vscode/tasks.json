@@ -1,0 +1,98 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Verify MSVC Environment",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && where cl.exe || (echo Error: cl.exe not found. & exit /b 1)"
+            ],
+            "problemMatcher": [],
+            "group": "none"
+        },
+        {
+            "label": "Check OpenSSL Libraries",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "if not exist \"C:\\Program Files (x86)\\OpenSSL-Win32\\lib\\VC\\x86\\MDd\\libcrypto.lib\" (echo Error: libcrypto.lib not found & exit /b 1) && if not exist \"C:\\Program Files (x86)\\OpenSSL-Win32\\lib\\VC\\x86\\MDd\\libssl.lib\" (echo Error: libssl.lib not found & exit /b 1)"
+            ],
+            "problemMatcher": [],
+            "group": "none",
+            "dependsOn": ["Verify MSVC Environment"]
+        },
+        {
+            "label": "Build libnfe",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && cl /D_DEBUG /MDd /Zi /nologo /W3 /D_CRT_SECURE_NO_WARNINGS /I \"C:\\Program Files (x86)\\OpenSSL-Win32\\include\" /I \"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\include\" /I \"${workspaceFolder}\\src\" \"${workspaceFolder}\\src\\libnfe.c\" /link /DLL /MACHINE:X86 /OUT:\"${workspaceFolder}\\build\\libnfe.dll\" /IMPLIB:\"${workspaceFolder}\\build\\libnfe.lib\" /LIBPATH:\"C:\\Program Files (x86)\\OpenSSL-Win32\\lib\\VC\\x86\\MDd\" /LIBPATH:\"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\debug\\lib\" libcrypto.lib libssl.lib ws2_32.lib cjson.lib"
+            ],
+            "problemMatcher": ["$msCompile"],
+            "group": "build",
+            "dependsOn": ["Check OpenSSL Libraries"]
+        },
+        {
+            "label": "Build test_libnfe",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && cl /D_DEBUG /MDd /Zi /nologo /W3 /D_CRT_SECURE_NO_WARNINGS /I \"${workspaceFolder}\\src\" /I \"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\include\" \"${workspaceFolder}\\test_libnfe.c\" /link /MACHINE:X86 /OUT:\"${workspaceFolder}\\build\\test_libnfe.exe\" /LIBPATH:\"${workspaceFolder}\\build\" /LIBPATH:\"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\debug\\lib\" \"${workspaceFolder}\\build\\libnfe.lib\" user32.lib cjson.lib"
+            ],
+            "problemMatcher": ["$msCompile"],
+            "group": "build",
+            "dependsOn": ["Build libnfe"]
+        },
+        {
+            "label": "Build test_json_to_xml",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat\" && cl /D_DEBUG /MDd /Zi /nologo /W3 /D_CRT_SECURE_NO_WARNINGS /I \"${workspaceFolder}\\src\" /I \"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\include\" \"${workspaceFolder}\\test_json_to_xml.c\" /link /MACHINE:X86 /OUT:\"${workspaceFolder}\\build\\test_json_to_xml.exe\" /LIBPATH:\"${workspaceFolder}\\build\" /LIBPATH:\"C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\debug\\lib\" \"${workspaceFolder}\\build\\libnfe.lib\" cjson.lib"
+            ],
+            "problemMatcher": ["$msCompile"],
+            "group": "build",
+            "dependsOn": ["Build libnfe"]
+        },
+        {
+            "label": "Copy DLL to libs",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "copy /Y \"${workspaceFolder}\\build\\libnfe.dll\" \"C:\\madeiras\\erp\\libs\\\""
+            ],
+            "problemMatcher": [],
+            "dependsOn": ["Build test_libnfe"]
+        },
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "echo Build and copy completed successfully.",
+            "args": [],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "dependsOn": ["Copy DLL to libs"],
+            "dependsOrder": "sequence"
+        },
+        {
+            "label": "Run test_libnfe",
+            "type": "shell",
+            "command": "${workspaceFolder}\\test_libnfe.bat",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}
