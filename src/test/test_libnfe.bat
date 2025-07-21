@@ -1,30 +1,33 @@
 @echo off
 setlocal
 
-:: Set the working directory to the script's location (C:\madeiras\erp)
 cd /d "%~dp0"
 
 echo.
 echo [INFO] Setting up test environment in %CD%...
 echo.
 
-:: Set environment variables for OpenSSL
-set OPENSSL_CONF=cfg\openssl.cnf
-set OPENSSL_MODULES=libs
-set PATH=%PATH%;%CD%\libs
+set OPENSSL_CONF=%CD%\cfg\openssl.cnf
+set OPENSSL_MODULES=%CD%\libs
+set PATH=%PATH%;%CD%\libs;%ProgramFiles(x86)%\OpenSSL-Win32\bin
+set LIBNFE_CONFIG_DIR=%CD%\cfg
+set LIBNFE_TEST_DIR=%CD%\test
+set LIBNFE_LIBS_DIR=%CD%\libs
 
 echo [INFO] Environment variables set.
 echo.
 
-:: Start the Python nfe-service in a new, minimized window
 echo [INFO] Starting local nfe-service.py...
 start "NFe Service" /min python service\nfe_service.py
 
-:: Give the server a moment to initialize
 echo [INFO] Waiting 5 seconds for the server to start...
 timeout /t 5 >nul
+netstat -an | findstr ":5001" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to start nfe_service.py on port 5001
+    goto :cleanup
+)
 
-:: Check if the test executable exists
 if exist test_libnfe.exe (
     echo [INFO] Running test_libnfe.exe...
     echo -------------------------------------------------
@@ -38,8 +41,8 @@ if exist test_libnfe.exe (
 :cleanup
 echo.
 echo [INFO] Test run finished. Shutting down nfe-service.
-:: Find and kill the Python process we started
-taskkill /F /IM python.exe /FI "WINDOWTITLE eq NFe Service*" >nul 2>&1
+for /f "tokens=2" %%i in ('tasklist /FI "IMAGENAME eq python.exe" /FI "WINDOWTITLE eq NFe Service*" /FO CSV /NH') do set PYTHON_PID=%%i
+if defined PYTHON_PID taskkill /F /PID %PYTHON_PID% >nul 2>&1
 
 echo [INFO] Cleanup complete.
 endlocal

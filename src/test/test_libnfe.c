@@ -1,15 +1,14 @@
 #include <stdio.h>
 #include <windows.h>
 #include <oleauto.h>
+#include "cJSON.h"
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
 
-// Define function pointer types for the new BSTR-returning functions
 typedef BSTR (*NFeFunction)(const char*);
 
-// Helper to print BSTR to console
 void PrintBstr(BSTR bstr) {
     if (bstr != NULL) {
         wprintf(L"%s\n", bstr);
@@ -18,11 +17,15 @@ void PrintBstr(BSTR bstr) {
     }
 }
 
-// Helper function to read a file into a string buffer
 char* ReadFileToString(const char* filename) {
-    FILE* fp = fopen(filename, "r");
+    char full_path[MAX_PATH];
+    const char* test_dir = getenv("LIBNFE_TEST_DIR");
+    if (!test_dir) test_dir = "test";
+    snprintf(full_path, MAX_PATH, "%s\\%s", test_dir, filename);
+
+    FILE* fp = fopen(full_path, "r");
     if (!fp) {
-        printf("Failed to open %s\n", filename);
+        printf("Failed to open %s\n", full_path);
         return NULL;
     }
     fseek(fp, 0, SEEK_END);
@@ -30,27 +33,36 @@ char* ReadFileToString(const char* filename) {
     fseek(fp, 0, SEEK_SET);
     char* buffer = (char*)malloc(size + 1);
     if (!buffer) {
-        printf("Failed to allocate memory for %s\n", filename);
+        printf("Failed to allocate memory for %s\n", full_path);
         fclose(fp);
         return NULL;
     }
-    fread(buffer, 1, size, fp);
-    buffer[size] = '\0';
+    size_t read_size = fread(buffer, 1, size, fp);
+    buffer[read_size] = '\0';
     fclose(fp);
+
+    cJSON* json = cJSON_Parse(buffer);
+    if (!json) {
+        printf("Invalid JSON in %s: %s\n", full_path, cJSON_GetErrorPtr());
+        free(buffer);
+        return NULL;
+    }
+    cJSON_Delete(json);
     return buffer;
 }
 
-
 int main() {
-    // Load the DLL from the libs subdirectory
-    HMODULE lib = LoadLibraryA("libs\\libnfe.dll");
+    const char* lib_dir = getenv("LIBNFE_LIBS_DIR");
+    if (!lib_dir) lib_dir = "libs";
+    char dll_path[MAX_PATH];
+    snprintf(dll_path, MAX_PATH, "%s\\libnfe.dll", lib_dir);
+    HMODULE lib = LoadLibraryA(dll_path);
     if (!lib) {
-        printf("Failed to load libnfe.dll. Make sure it is in the 'libs' subdirectory.\n");
+        printf("Failed to load %s. Make sure it is in the '%s' subdirectory.\n", dll_path, lib_dir);
         return 1;
     }
     printf("libnfe.dll loaded successfully.\n\n");
 
-    // Get function pointers
     NFeFunction NfeStatusServico = (NFeFunction)GetProcAddress(lib, "NfeStatusServico");
     NFeFunction NFeAutorizacao = (NFeFunction)GetProcAddress(lib, "NFeAutorizacao");
 
@@ -60,43 +72,39 @@ int main() {
         return 1;
     }
 
-    // --- Test 1: NfeStatusServico ---
-    char* status_payload = ReadFileToString("test\\status_servico.json");
+    char* status_payload = ReadFileToString("status_servico.json");
     if (!status_payload) {
         FreeLibrary(lib);
         return 1;
     }
     
     printf("Testing NfeStatusServico...\n");
-    printf("Payload: (from test\\status_servico.json)\n");
+    printf("Payload: (from %s\\status_servico.json)\n", getenv("LIBNFE_TEST_DIR") ? getenv("LIBNFE_TEST_DIR") : "test");
     
     BSTR bstr_status_response = NfeStatusServico(status_payload);
     printf("Response: ");
     PrintBstr(bstr_status_response);
     printf("\n");
-    free(status_payload); // Clean up the status payload
+    free(status_payload);
 
-    // --- Test 2: NFeAutorizacao ---
-    char* json_nfe_payload = ReadFileToString("test\\nfe.json");
+    char* json_nfe_payload = ReadFileToString("nfe.json");
     if (!json_nfe_payload) {
         FreeLibrary(lib);
         return 1;
     }
 
     printf("Testing NFeAutorizacao...\n");
-    printf("Payload: (from test\\nfe.json)\n");
+    printf("Payload: (from %s\\nfe.json)\n", getenv("LIBNFE_TEST_DIR") ? getenv("LIBNFE_TEST_DIR") : "test");
 
     BSTR bstr_nfe_response = NFeAutorizacao(json_nfe_payload);
     printf("Response: ");
     PrintBstr(bstr_nfe_response);
     printf("\n");
 
-    // Cleanup
     free(json_nfe_payload);
     FreeLibrary(lib);
 
     printf("Tests finished. Press Enter to exit.\n");
     getchar();
-
     return 0;
 }

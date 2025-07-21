@@ -2,57 +2,76 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Build: libnfe.dll",
+            "label": "Clean Build",
             "type": "shell",
-            "command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat",
-            "args": [
-                "&&",
-                "cl.exe",
-                "/D_DEBUG", "/MDd", "/Zi", "/nologo", "/W3", "/D_CRT_SECURE_NO_WARNINGS",
-                "/I", "${workspaceFolder}\\src\\client-side",
-                "/I", "C:\\Program Files (x86)\\OpenSSL-Win32\\include",
-                "/I", "C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\include",
-                "${workspaceFolder}\\src\\client-side\\libnfe.c",
-                "/link", "/DLL", "/MACHINE:X86",
-                "/OUT:${workspaceFolder}\\build\\libnfe.dll",
-                "/IMPLIB:${workspaceFolder}\\build\\libnfe.lib",
-                "/LIBPATH:C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\debug\\lib",
-                "cjson.lib"
-            ],
-            "problemMatcher": ["$msCompile"],
+            "command": "cmd",
+            "args": ["/c", "del /Q ${workspaceFolder}\\build\\*.* && del /Q ${workspaceFolder}\\*.obj && del /Q ${workspaceFolder}\\*.pdb"],
+            "problemMatcher": [],
             "group": "build"
         },
         {
-            "label": "Build: test_libnfe.exe",
-            "type": "shell",
-            "command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat",
-            "args": [
-                "&&",
-                "cl.exe",
-                "/D_DEBUG", "/MDd", "/Zi", "/nologo", "/W3", "/D_CRT_SECURE_NO_WARNINGS",
-                "/I", "${workspaceFolder}\\src\\client-side",
-                "/I", "C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\include",
-                "${workspaceFolder}\\src\\test\\test_libnfe.c",
-                "/link", "/MACHINE:X86",
-                "/OUT:${workspaceFolder}\\build\\test_libnfe.exe",
-                "/LIBPATH:${workspaceFolder}\\build",
-                "/LIBPATH:C:\\Users\\jose.DE-SOUZA\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\debug\\lib",
-                "libnfe.lib",
-                "cjson.lib"
-            ],
-            "problemMatcher": ["$msCompile"],
-            "group": "build",
-            "dependsOn": ["Build: libnfe.dll"]
-        },
-        {
-            "label": "Deploy: Create Directories",
+            "label": "Create ERP Directories",
             "type": "shell",
             "command": "cmd",
             "args": [
                 "/c",
-                "if not exist C:\\madeiras\\erp mkdir C:\\madeiras\\erp && if not exist C:\\madeiras\\erp\\libs mkdir C:\\madeiras\\erp\\libs && if not exist C:\\madeiras\\erp\\cfg mkdir C:\\madeiras\\erp\\cfg && if not exist C:\\madeiras\\erp\\test mkdir C:\\madeiras\\erp\\test && if not exist C:\\madeiras\\erp\\service mkdir C:\\madeiras\\erp\\service && if not exist C:\\madeiras\\erp\\certificates mkdir C:\\madeiras\\erp\\certificates"
+                "if not exist C:\\madeiras\\erp mkdir C:\\madeiras\\erp && if not exist C:\\madeiras\\erp\\certificates mkdir C:\\madeiras\\erp\\certificates && if not exist C:\\madeiras\\erp\\cfg mkdir C:\\madeiras\\erp\\cfg && if not exist C:\\madeiras\\erp\\db mkdir C:\\madeiras\\erp\\db && if not exist C:\\madeiras\\erp\\libs mkdir C:\\madeiras\\erp\\libs && if not exist C:\\madeiras\\erp\\service mkdir C:\\madeiras\\erp\\service && if not exist C:\\madeiras\\erp\\test mkdir C:\\madeiras\\erp\\test"
             ],
-            "problemMatcher": []
+            "problemMatcher": [],
+            "group": "build"
+        },
+        {
+            "label": "Build: libnfe.dll",
+            "type": "shell",
+            "command": "${env:ProgramFiles}\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat",
+            "args": [
+                "&&",
+                "cl.exe",
+                "/D_DEBUG", "/MDd", "/Zi", "/nologo", "/W3", "/D_CRT_SECURE_NO_WARNINGS",
+                "/I", "${workspaceFolder}\\src\\client-side",
+                "/I", "${env:ProgramFiles(x86)}\\OpenSSL-Win32\\include",
+                "/I", "${env:USERPROFILE}\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\include",
+                "${workspaceFolder}\\src\\client-side\\libnfe.c",
+                "/link", "/DLL", "/MACHINE:X86",
+                "/OUT:${workspaceFolder}\\build\\libnfe.dll",
+                "/IMPLIB:${workspaceFolder}\\build\\libnfe.lib",
+                "/LIBPATH:${env:USERPROFILE}\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\debug\\lib",
+                "/LIBPATH:${env:ProgramFiles(x86)}\\OpenSSL-Win32\\lib\\VC\\x86\\MDd",
+                "libcrypto.lib",
+                "libssl.lib",
+                "cjson.lib",
+                "ws2_32.lib"
+            ],
+            "problemMatcher": ["$msCompile"],
+            "group": "build",
+            "dependsOn": ["Create ERP Directories"]
+        },
+        {
+            "label": "Build: test_libnfe.exe",
+            "type": "shell",
+            "command": "${env:ProgramFiles}\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat",
+            "args": [
+                "&&",
+                "cl.exe",
+                "/D_DEBUG", "/MDd", "/Zi", "/nologo", "/W3", "/D_CRT_SECURE_NO_WARNINGS",
+                "/I", "${workspaceFolder}\\src\\client-side",
+                "/I", "${env:ProgramFiles(x86)}\\OpenSSL-Win32\\include",
+                "/I", "${env:USERPROFILE}\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\include",
+                "${workspaceFolder}\\src\\test\\test_libnfe.c",
+                "/link", "/MACHINE:X86",
+                "/OUT:${workspaceFolder}\\build\\test_libnfe.exe",
+                "/LIBPATH:${workspaceFolder}\\build",
+                "/LIBPATH:${env:USERPROFILE}\\Softdev\\tools\\vcpkg\\installed\\x86-windows\\debug\\lib",
+                "/LIBPATH:${env:ProgramFiles(x86)}\\OpenSSL-Win32\\lib\\VC\\x86\\MDd",
+                "libnfe.lib",
+                "cjson.lib",
+                "user32.lib",
+                "ole32.lib",
+                "oleaut32.lib"
+            ],
+            "problemMatcher": ["$msCompile"],
+            "group": "build",
+            "dependsOn": ["Build: libnfe.dll", "Create ERP Directories"]
         },
         {
             "label": "Deploy: Copy Files",
@@ -60,45 +79,34 @@
             "command": "cmd",
             "args": [
                 "/c",
-                "copy /Y \"${workspaceFolder}\\build\\libnfe.dll\" \"C:\\madeiras\\erp\\libs\\\" && copy /Y \"${workspaceFolder}\\build\\test_libnfe.exe\" \"C:\\madeiras\\erp\\\" && copy /Y \"${workspaceFolder}\\src\\test\\test_libnfe.bat\" \"C:\\madeiras\\erp\\\" && copy /Y \"${workspaceFolder}\\src\\client-side\\libnfe.cfg\" \"C:\\madeiras\\erp\\cfg\\\" && copy /Y \"${workspaceFolder}\\src\\client-side\\openssl.cnf\" \"C:\\madeiras\\erp\\cfg\\\" && copy /Y \"${workspaceFolder}\\src\\test\\nfe.json\" \"C:\\madeiras\\erp\\test\\\" && copy /Y \"${workspaceFolder}\\src\\test\\status_servico.json\" \"C:\\madeiras\\erp\\test\\\" && copy /Y \"${workspaceFolder}\\src\\server-side\\nfe_service.py\" \"C:\\madeiras\\erp\\service\\\""
+                "copy /Y ${workspaceFolder}\\build\\libnfe.dll C:\\madeiras\\erp\\libs && copy /Y ${workspaceFolder}\\build\\test_libnfe.exe C:\\madeiras\\erp && copy /Y ${workspaceFolder}\\src\\test\\test_libnfe.bat C:\\madeiras\\erp && copy /Y ${workspaceFolder}\\src\\client-side\\libnfe.cfg C:\\madeiras\\erp\\cfg && copy /Y ${workspaceFolder}\\src\\client-side\\openssl.cnf C:\\madeiras\\erp\\cfg && copy /Y ${workspaceFolder}\\src\\test\\*.json C:\\madeiras\\erp\\test && copy /Y ${workspaceFolder}\\src\\server-side\\nfe_service.py C:\\madeiras\\erp\\service\\nfe_service.py"
             ],
             "problemMatcher": [],
-            "dependsOn": [
-                "Build: test_libnfe.exe",
-                "Deploy: Create Directories"
-            ]
+            "group": "build",
+            "dependsOn": ["Build: test_libnfe.exe", "Create ERP Directories"]
         },
         {
             "label": "build",
             "type": "shell",
-            "command": "echo Build and deployment to C:\\madeiras\\erp completed successfully.",
-            "args": [],
-            "problemMatcher": [],
+            "command": "echo Build completed successfully.",
+            "dependsOn": ["Deploy: Copy Files"],
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
-            "dependsOn": [
-                "Deploy: Copy Files"
-            ],
-            "dependsOrder": "sequence"
+            "problemMatcher": []
         },
         {
             "label": "Run Local Test Suite",
             "type": "shell",
             "command": "cmd",
-            "args": [
-                "/c",
-                "start \"LibNFe Test Suite\" cmd /c C:\\madeiras\\erp\\test_libnfe.bat"
-            ],
-            "problemMatcher": [],
+            "args": ["/c", "start cmd /k C:\\madeiras\\erp\\test_libnfe.bat"],
+            "dependsOn": ["build"],
             "group": {
                 "kind": "test",
                 "isDefault": true
             },
-            "dependsOn": [
-                "build"
-            ]
+            "problemMatcher": []
         }
     ]
 }
