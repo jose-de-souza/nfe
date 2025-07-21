@@ -79,7 +79,7 @@
             "command": "cmd",
             "args": [
                 "/c",
-                "copy /Y ${workspaceFolder}\\build\\libnfe.dll C:\\madeiras\\erp\\libs && copy /Y ${workspaceFolder}\\build\\test_libnfe.exe C:\\madeiras\\erp && copy /Y ${workspaceFolder}\\src\\test\\test_libnfe.bat C:\\madeiras\\erp && copy /Y ${workspaceFolder}\\src\\client-side\\libnfe.cfg C:\\madeiras\\erp\\cfg && copy /Y ${workspaceFolder}\\src\\client-side\\openssl.cnf C:\\madeiras\\erp\\cfg && copy /Y ${workspaceFolder}\\src\\test\\*.json C:\\madeiras\\erp\\test && copy /Y ${workspaceFolder}\\src\\server-side\\nfe_service.py C:\\madeiras\\erp\\service\\nfe_service.py"
+                "copy /Y ${workspaceFolder}\\build\\libnfe.dll C:\\madeiras\\erp\\libs && copy /Y ${workspaceFolder}\\libs\\*.dll C:\\madeiras\\erp\\libs && copy /Y ${workspaceFolder}\\build\\test_libnfe.exe C:\\madeiras\\erp && copy /Y ${workspaceFolder}\\src\\test\\test_libnfe.bat C:\\madeiras\\erp && copy /Y ${workspaceFolder}\\src\\client-side\\libnfe.cfg C:\\madeiras\\erp\\cfg && copy /Y ${workspaceFolder}\\src\\client-side\\openssl.cnf C:\\madeiras\\erp\\cfg && copy /Y ${workspaceFolder}\\src\\test\\*.json C:\\madeiras\\erp\\test && copy /Y ${workspaceFolder}\\src\\server-side\\nfe_service.py C:\\madeiras\\erp\\service\\nfe_service.py"
             ],
             "problemMatcher": [],
             "group": "build",
