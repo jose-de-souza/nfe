@@ -21,6 +21,18 @@
             "group": "build"
         },
         {
+            "label": "Generate Certificates",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "if not exist C:\\madeiras\\erp\\service\\cacerts.pem if not exist C:\\madeiras\\erp\\service\\server.crt if not exist C:\\madeiras\\erp\\service\\server.key (openssl req -x509 -newkey rsa:4096 -keyout C:\\madeiras\\erp\\service\\client_ca.key -out C:\\madeiras\\erp\\service\\cacerts.pem -days 365 -nodes -subj \"/CN=TestCA\" && openssl req -newkey rsa:4096 -keyout C:\\madeiras\\erp\\service\\server.key -out C:\\madeiras\\erp\\service\\server.csr -nodes -subj \"/CN=localhost\" && openssl x509 -req -in C:\\madeiras\\erp\\service\\server.csr -CA C:\\madeiras\\erp\\service\\cacerts.pem -CAkey C:\\madeiras\\erp\\service\\client_ca.key -CAcreateserial -out C:\\madeiras\\erp\\service\\server.crt -days 365 && del C:\\madeiras\\erp\\service\\server.csr C:\\madeiras\\erp\\service\\client_ca.key)"
+            ],
+            "problemMatcher": [],
+            "group": "build",
+            "dependsOn": ["Create ERP Directories"]
+        },
+        {
             "label": "Build: libnfe.dll",
             "type": "shell",
             "command": "${env:ProgramFiles}\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat",
@@ -83,7 +95,7 @@
             ],
             "problemMatcher": [],
             "group": "build",
-            "dependsOn": ["Build: test_libnfe.exe", "Create ERP Directories"]
+            "dependsOn": ["Build: test_libnfe.exe", "Create ERP Directories", "Generate Certificates"]
         },
         {
             "label": "build",

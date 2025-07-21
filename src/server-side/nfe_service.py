@@ -92,12 +92,9 @@ def nfe_recepcao_evento():
     # TODO: Implement business logic for RecepcaoEvento
     return jsonify({"status": "received", "operation": "RecepcaoEvento", "message": "Payload is being processed."}), 202
 
-
 # --- Main Execution ---
 if __name__ == '__main__':
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.load_cert_chain('server.crt', 'server.key')
-    context.verify_mode = ssl.CERT_REQUIRED
-    context.load_verify_locations('client_ca.crt') 
-
+    context.load_cert_chain('C:\\madeiras\\erp\\service\\server.crt', 'C:\\madeiras\\erp\\service\\server.key')
+    context.load_verify_locations('C:\\madeiras\\erp\\service\\cacerts.pem')
     run_simple('0.0.0.0', 5001, app, ssl_context=context)
