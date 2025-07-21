@@ -21,6 +21,8 @@ set LIBNFE_TEST_DIR=%ERP_HOME%\test
 set LIBNFE_LIBS_DIR=%ERP_HOME%\libs
 
 echo [INFO] Environment variables set.
+echo [DEBUG] LIBNFE_CONFIG_DIR=%LIBNFE_CONFIG_DIR%
+echo [DEBUG] PATH=%PATH%
 echo.
 
 echo [INFO] Starting local nfe_service.py...
@@ -47,20 +49,21 @@ if exist %ERP_HOME%\test_libnfe.exe (
 :cleanup
 echo.
 echo [INFO] Test run finished. Shutting down nfe_service.py...
-for /f "tokens=2 delims=," %%i in ('tasklist /FI "IMAGENAME eq python.exe" /FI "WINDOWTITLE eq NFe Service*" /FO CSV /NH') do (
-    set PYTHON_PID=%%i
-    :: Remove quotes from PID
-    set PYTHON_PID=!PYTHON_PID:"=!
-    if defined PYTHON_PID (
-        taskkill /F /PID !PYTHON_PID! >nul 2>&1
-        if errorlevel 1 (
-            echo [WARNING] Failed to terminate nfe_service.py (PID !PYTHON_PID!)
-        ) else (
-            echo [INFO] nfe_service.py (PID !PYTHON_PID!) terminated successfully
-        )
+echo [DEBUG] Checking for nfe_service.py process...
+tasklist /FI "IMAGENAME eq python.exe" /FI "WINDOWTITLE eq NFe Service*" /FO CSV /NH
+set PYTHON_PID=
+for /f "tokens=2 delims=," %%i in ('tasklist /FI "IMAGENAME eq python.exe" /FI "WINDOWTITLE eq NFe Service*" /FO CSV /NH') do set PYTHON_PID=%%i
+if defined PYTHON_PID (
+    set PYTHON_PID=%PYTHON_PID:"=%
+    echo [DEBUG] Found nfe_service.py with PID %PYTHON_PID%
+    taskkill /F /PID %PYTHON_PID% >nul 2>&1
+    if errorlevel 1 (
+        echo [WARNING] Failed to terminate nfe_service.py (PID %PYTHON_PID%)
     ) else (
-        echo [WARNING] No nfe_service.py process found
+        echo [INFO] nfe_service.py (PID %PYTHON_PID%) terminated successfully
     )
+) else (
+    echo [INFO] No nfe_service.py process found
 )
 
 echo [INFO] Cleanup complete.

@@ -10,6 +10,7 @@
 #include <openssl/bio.h>
 #include <openssl/pkcs12.h>
 #include <openssl/provider.h>
+#include <openssl/applink.c>
 #include <shlwapi.h>
 
 #include "cJSON.h"
@@ -40,11 +41,13 @@ static BSTR g_bstr_response = NULL;
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
     if (fdwReason == DLL_PROCESS_ATTACH) {
         hModule_this_dll = hinstDLL;
+        fprintf(stderr, "DEBUG: DllMain - DLL_PROCESS_ATTACH\n");
     } else if (fdwReason == DLL_PROCESS_DETACH) {
         if (g_bstr_response) {
             SysFreeString(g_bstr_response);
             g_bstr_response = NULL;
         }
+        fprintf(stderr, "DEBUG: DllMain - DLL_PROCESS_DETACH\n");
     }
     return TRUE;
 }
@@ -92,6 +95,8 @@ static Config* load_config() {
     const char* config_dir = getenv("LIBNFE_CONFIG_DIR");
     if (!config_dir) config_dir = getenv("USERPROFILE");
 
+    fprintf(stderr, "DEBUG: LIBNFE_CONFIG_DIR=%s\n", config_dir ? config_dir : "NULL");
+
     if (GetModuleFileNameA(hModule_this_dll, dll_path, MAX_PATH) == 0) {
         fprintf(stderr, "ERROR: Failed to get DLL module path.\n");
         return NULL;
@@ -100,8 +105,10 @@ static Config* load_config() {
     strncpy(app_home_dir, dll_path, MAX_PATH);
     PathRemoveFileSpecA(app_home_dir);
     PathRemoveFileSpecA(app_home_dir);
+    fprintf(stderr, "DEBUG: app_home_dir=%s\n", app_home_dir);
 
     snprintf(config_path, MAX_PATH, "%s\\libnfe.cfg", config_dir ? config_dir : app_home_dir);
+    fprintf(stderr, "DEBUG: Attempting to open config file: %s\n", config_path);
 
     FILE* file = fopen(config_path, "r");
     if (!file) {
@@ -122,12 +129,14 @@ static Config* load_config() {
         char* value = strtok(NULL, "\n\r");
         if (key && value) {
             while (isspace((unsigned char)*value)) value++;
+            fprintf(stderr, "DEBUG: Parsed config: key=%s, value=%s\n", key, value);
 
             #define SET_CONFIG_STR(cfg_key, field) if (_stricmp(key, cfg_key) == 0) config->field = _strdup(value)
             #define SET_CONFIG_PATH(cfg_key, field) if (_stricmp(key, cfg_key) == 0) { \
                 char full_path[MAX_PATH]; \
                 if (PathIsRelativeA(value)) { snprintf(full_path, MAX_PATH, "%s\\%s", app_home_dir, value); config->field = _strdup(full_path); } \
                 else { config->field = _strdup(value); } \
+                fprintf(stderr, "DEBUG: Set %s=%s\n", cfg_key, config->field); \
             }
 
             SET_CONFIG_PATH("certificate_path", certificate_path);
@@ -161,6 +170,8 @@ static Config* load_config() {
 static BSTR nfe_service_request(const char* service_url, const Config* config, const char* user_payload) {
     if (!service_url) return return_error("Service URL for this operation is not defined in libnfe.cfg");
 
+    fprintf(stderr, "DEBUG: Initializing nfe_service_request for URL: %s\n", service_url);
+
     cJSON* wrapper = cJSON_CreateObject();
     cJSON* config_json = cJSON_CreateObject();
     cJSON* payload_json = cJSON_Parse(user_payload);
@@ -181,6 +192,7 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         return return_error("Winsock init failed");
     }
 
+    fprintf(stderr, "DEBUG: Initializing OpenSSL\n");
     OPENSSL_init_ssl(0, NULL);
     SSL_CTX* ssl_ctx = SSL_CTX_new(TLS_client_method());
     if (!ssl_ctx) {
@@ -191,6 +203,7 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         return return_error(err_buf);
     }
 
+    fprintf(stderr, "DEBUG: Loading certificate from %s\n", config->certificate_path);
     FILE* pfx_file = fopen(config->certificate_path, "rb");
     if (!pfx_file) {
         free(final_payload);
@@ -211,6 +224,7 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
 
     EVP_PKEY* pkey = NULL;
     X509* cert = NULL;
+    fprintf(stderr, "DEBUG: Parsing PKCS12 with password\n");
     if (!PKCS12_parse(pfx, config->certificate_pass, &pkey, &cert, NULL)) {
         char err_buf[256];
         ERR_error_string(ERR_get_error(), err_buf);
@@ -231,6 +245,7 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         WSACleanup();
         return return_error(err_buf);
     }
+    fprintf(stderr, "DEBUG: Loading CA certificates from %s\n", config->cacerts_path);
     SSL_CTX_load_verify_locations(ssl_ctx, config->cacerts_path, NULL);
 
     const char *url_prefix = "https://";
@@ -264,6 +279,7 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
 
     const char *path = path_start;
 
+    fprintf(stderr, "DEBUG: Connecting to %s\n", host_and_port);
     BIO* bio = BIO_new_ssl_connect(ssl_ctx);
     if (!bio) {
         char err_buf[256];
