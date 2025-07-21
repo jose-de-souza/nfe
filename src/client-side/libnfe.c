@@ -101,7 +101,7 @@ static Config* load_config() {
     PathRemoveFileSpecA(app_home_dir);
     PathRemoveFileSpecA(app_home_dir);
 
-    snprintf(config_path, MAX_PATH, "%s\\cfg\\libnfe.cfg", config_dir ? config_dir : app_home_dir);
+    snprintf(config_path, MAX_PATH, "%s\\libnfe.cfg", config_dir ? config_dir : app_home_dir);
 
     FILE* file = fopen(config_path, "r");
     if (!file) {

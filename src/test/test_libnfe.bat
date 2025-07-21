@@ -1,44 +1,68 @@
 @echo off
-setlocal EnableDelayedExpansion
+setlocal
 
 :: Set ERP_HOME and change working directory
 set ERP_HOME=C:\madeiras\erp
-cd /d %ERP_HOME%
+cd /d "%ERP_HOME%"
 if not "%CD%"=="%ERP_HOME%" (
     echo [ERROR] Failed to set working directory to %ERP_HOME%
     exit /b 1
 )
 
-:: Start nfe_service.py in the background
-echo Starting nfe_service.py...
-start /b python %ERP_HOME%\service\nfe_service.py
-if errorlevel 1 (
-    echo [ERROR] Failed to start nfe_service.py
-    exit /b 1
-)
+echo.
+echo [INFO] Setting up test environment in %CD%...
+echo.
 
-:: Wait for the server to start (up to 10 seconds)
-set retries=0
-:wait_server
-timeout /t 1 >nul
+set OPENSSL_CONF=%ERP_HOME%\cfg\openssl.cnf
+set OPENSSL_MODULES=%ERP_HOME%\libs
+set PATH=%PATH%;%ERP_HOME%\libs;%ProgramFiles(x86)%\OpenSSL-Win32\bin
+set LIBNFE_CONFIG_DIR=%ERP_HOME%\cfg
+set LIBNFE_TEST_DIR=%ERP_HOME%\test
+set LIBNFE_LIBS_DIR=%ERP_HOME%\libs
+
+echo [INFO] Environment variables set.
+echo.
+
+echo [INFO] Starting local nfe_service.py...
+start "NFe Service" /min python %ERP_HOME%\service\nfe_service.py
+
+echo [INFO] Waiting 5 seconds for the server to start...
+timeout /t 5 >nul
 netstat -an | findstr ":5001" >nul
 if errorlevel 1 (
-    set /a retries+=1
-    if !retries! lss 10 (
-        goto :wait_server
+    echo [ERROR] Failed to start nfe_service.py on port 5001
+    goto :cleanup
+)
+
+if exist %ERP_HOME%\test_libnfe.exe (
+    echo [INFO] Running test_libnfe.exe...
+    echo -------------------------------------------------
+    %ERP_HOME%\test_libnfe.exe
+    echo -------------------------------------------------
+) else (
+    echo [ERROR] test_libnfe.exe not found! Please run the build task first.
+    goto :cleanup
+)
+
+:cleanup
+echo.
+echo [INFO] Test run finished. Shutting down nfe_service.py...
+for /f "tokens=2 delims=," %%i in ('tasklist /FI "IMAGENAME eq python.exe" /FI "WINDOWTITLE eq NFe Service*" /FO CSV /NH') do (
+    set PYTHON_PID=%%i
+    :: Remove quotes from PID
+    set PYTHON_PID=!PYTHON_PID:"=!
+    if defined PYTHON_PID (
+        taskkill /F /PID !PYTHON_PID! >nul 2>&1
+        if errorlevel 1 (
+            echo [WARNING] Failed to terminate nfe_service.py (PID !PYTHON_PID!)
+        ) else (
+            echo [INFO] nfe_service.py (PID !PYTHON_PID!) terminated successfully
+        )
+    ) else (
+        echo [WARNING] No nfe_service.py process found
     )
-    echo [ERROR] Server did not start after 10 seconds
-    exit /b 1
 )
 
-:: Run test_libnfe.exe
-echo Running test_libnfe.exe...
-%ERP_HOME%\test_libnfe.exe
-if errorlevel 1 (
-    echo [ERROR] test_libnfe.exe failed
-    exit /b 1
-)
-
-:: Cleanup
-echo Tests completed successfully.
-exit /b 0
+echo [INFO] Cleanup complete.
+endlocal
+pause
