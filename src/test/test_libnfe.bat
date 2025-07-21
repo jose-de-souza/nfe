@@ -11,6 +11,7 @@ if not "%CD%"=="%ERP_HOME%" (
 
 echo.
 echo [INFO] Setting up test environment in %CD%...
+echo [DEBUG] test_libnfe.bat version: 9b8a7c6d-5e4f-4a3b-9f2c-1d0e9f8a7b6c
 echo.
 
 set OPENSSL_CONF=%ERP_HOME%\cfg\openssl.cnf
