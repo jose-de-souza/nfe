@@ -62,14 +62,15 @@ static BSTR char_to_bstr(const char* utf8_str) {
     return bstr;
 }
 
-static BSTR return_error(const char* msg) {
+static BSTR return_error(const char* msg, int cleanup_winsock) {
     char error_json[1024];
     snprintf(error_json, sizeof(error_json), "{\"error\": \"%s\"}", msg);
-    fprintf(stderr, "[libnfe.c] FATAL ERROR: %s\n", msg);
+    fprintf(stderr, "[libnfe.c] ERROR: %s\n", msg);
     ERR_print_errors_fp(stderr);
     fflush(stderr);
     if (g_bstr_response) SysFreeString(g_bstr_response);
     g_bstr_response = char_to_bstr(error_json);
+    if (cleanup_winsock) WSACleanup();
     return g_bstr_response;
 }
 
@@ -148,14 +149,14 @@ static Config* load_config() {
 }
 
 static BSTR nfe_service_request(const char* service_url, const Config* config, const char* user_payload) {
-    if (!service_url) return return_error("Service URL not defined");
+    if (!service_url) return return_error("Service URL not defined", 0);
 
     cJSON* wrapper = cJSON_CreateObject();
     cJSON* config_json = cJSON_CreateObject();
     cJSON* payload_json = cJSON_Parse(user_payload);
     if (!payload_json) {
         cJSON_Delete(wrapper);
-        return return_error("Invalid user JSON payload.");
+        return return_error("Invalid user JSON payload.", 0);
     }
     cJSON_AddItemToObject(wrapper, "payload", payload_json);
     cJSON_AddStringToObject(config_json, "sefaz", config->sefaz);
@@ -163,11 +164,14 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     cJSON_AddItemToObject(wrapper, "config", config_json);
     char* final_payload = cJSON_PrintUnformatted(wrapper);
     cJSON_Delete(wrapper);
+    if (!final_payload) {
+        return return_error("Failed to create JSON payload.", 0);
+    }
 
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         free(final_payload);
-        return return_error("Winsock init failed");
+        return return_error("Winsock init failed", 0);
     }
 
     OPENSSL_init_ssl(0, NULL);
@@ -175,7 +179,7 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     if (!ssl_ctx) {
         free(final_payload);
         WSACleanup();
-        return return_error("Failed to create SSL_CTX");
+        return return_error("Failed to create SSL_CTX", 1);
     }
 
     FILE* pfx_file = fopen(config->certificate_path, "rb");
@@ -183,15 +187,16 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         free(final_payload);
         SSL_CTX_free(ssl_ctx);
         WSACleanup();
-        return return_error("Failed to open client PFX file.");
+        return return_error("Failed to open client PFX file.", 1);
     }
+    
     PKCS12* pfx = d2i_PKCS12_fp(pfx_file, NULL);
     fclose(pfx_file);
     if (!pfx) {
         free(final_payload);
         SSL_CTX_free(ssl_ctx);
         WSACleanup();
-        return return_error("Failed to parse PFX file.");
+        return return_error("Failed to parse PFX file.", 1);
     }
 
     EVP_PKEY* pkey = NULL;
@@ -201,30 +206,37 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         PKCS12_free(pfx);
         SSL_CTX_free(ssl_ctx);
         WSACleanup();
-        return return_error("Failed to parse PKCS12 data. Check password.");
+        return return_error("Failed to parse PKCS12 data. Check password.", 1);
     }
     PKCS12_free(pfx);
 
     if (SSL_CTX_use_certificate(ssl_ctx, cert) <= 0 || SSL_CTX_use_PrivateKey(ssl_ctx, pkey) <= 0) {
+        free(final_payload);
         EVP_PKEY_free(pkey);
         X509_free(cert);
         SSL_CTX_free(ssl_ctx);
         WSACleanup();
-        return return_error("Failed to use client certificate or private key.");
+        return return_error("Failed to use client certificate or private key.", 1);
     }
     if (SSL_CTX_load_verify_locations(ssl_ctx, config->cacerts_path, NULL) != 1) {
+        free(final_payload);
         EVP_PKEY_free(pkey);
         X509_free(cert);
         SSL_CTX_free(ssl_ctx);
         WSACleanup();
-        return return_error("Failed to load CA certificate.");
+        return return_error("Failed to load CA certificate.", 1);
     }
 
     const char *url_prefix = "https://";
     const char *host_start = (strncmp(service_url, url_prefix, strlen(url_prefix)) == 0) ? service_url + strlen(url_prefix) : service_url;
     const char *path_start = strchr(host_start, '/');
     if (!path_start) {
-        return return_error("Invalid service URL format.");
+        free(final_payload);
+        EVP_PKEY_free(pkey);
+        X509_free(cert);
+        SSL_CTX_free(ssl_ctx);
+        WSACleanup();
+        return return_error("Invalid service URL format.", 1);
     }
     char host_and_port[256];
     size_t host_len = path_start - host_start;
@@ -233,6 +245,14 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     const char *path = path_start;
 
     BIO* bio = BIO_new_ssl_connect(ssl_ctx);
+    if (!bio) {
+        free(final_payload);
+        EVP_PKEY_free(pkey);
+        X509_free(cert);
+        SSL_CTX_free(ssl_ctx);
+        WSACleanup();
+        return return_error("Failed to create BIO.", 1);
+    }
     BIO_set_conn_hostname(bio, host_and_port);
 
     if (BIO_do_connect(bio) <= 0) {
@@ -242,7 +262,7 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         BIO_free_all(bio);
         SSL_CTX_free(ssl_ctx);
         WSACleanup();
-        return return_error("Failed to connect to server.");
+        return return_error(BIO_should_retry(bio) ? "Connection timed out." : "Failed to connect to server.", 1);
     }
 
     SSL* ssl = NULL;
@@ -268,44 +288,62 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     size_t total_len = 0;
     response_buffer = (char*)malloc(buffer_size);
     if (!response_buffer) {
-        return_error("Failed to allocate response buffer.");
-    } else {
-        int len;
-        while ((len = BIO_read(bio, response_buffer + total_len, buffer_size - total_len - 1)) > 0) {
-            total_len += len;
-            if (total_len >= buffer_size - 1) {
-                buffer_size *= 2;
-                char* new_buffer = (char*)realloc(response_buffer, buffer_size);
-                if (!new_buffer) {
-                    free(response_buffer);
-                    return_error("Failed to reallocate response buffer.");
-                    response_buffer = NULL;
-                    break;
-                }
-                response_buffer = new_buffer;
+        EVP_PKEY_free(pkey);
+        X509_free(cert);
+        BIO_free_all(bio);
+        SSL_CTX_free(ssl_ctx);
+        WSACleanup();
+        return return_error("Failed to allocate response buffer.", 1);
+    }
+
+    int len;
+    while ((len = BIO_read(bio, response_buffer + total_len, buffer_size - total_len - 1)) > 0) {
+        total_len += len;
+        if (total_len >= buffer_size - 1) {
+            buffer_size *= 2;
+            char* new_buffer = (char*)realloc(response_buffer, buffer_size);
+            if (!new_buffer) {
+                free(response_buffer);
+                EVP_PKEY_free(pkey);
+                X509_free(cert);
+                BIO_free_all(bio);
+                SSL_CTX_free(ssl_ctx);
+                WSACleanup();
+                return return_error("Failed to reallocate response buffer.", 1);
             }
+            response_buffer = new_buffer;
         }
-        
-        if (response_buffer) {
-            fprintf(stderr, "[libnfe.c] BIO_read loop finished. Total bytes read: %zu\n", total_len);
+    }
+    
+    fprintf(stderr, "[libnfe.c] BIO_read loop finished. Total bytes read: %zu\n", total_len);
+    fflush(stderr);
+
+    if (total_len <= 0 && BIO_should_retry(bio)) {
+        free(response_buffer);
+        EVP_PKEY_free(pkey);
+        X509_free(cert);
+        BIO_free_all(bio);
+        SSL_CTX_free(ssl_ctx);
+        WSACleanup();
+        return return_error("Read operation timed out.", 1);
+    }
+
+    if (response_buffer) {
+        if (total_len > 0) {
+            response_buffer[total_len] = '\0';
+            fprintf(stderr, "\n--- [libnfe.c] RAW RESPONSE BUFFER ---\n%s\n-------------------------------------\n", response_buffer);
             fflush(stderr);
 
-            if (total_len > 0) {
-                response_buffer[total_len] = '\0';
-                fprintf(stderr, "\n--- [libnfe.c] RAW RESPONSE BUFFER ---\n%s\n-------------------------------------\n", response_buffer);
-                fflush(stderr);
-
-                char* body = strstr(response_buffer, "\r\n\r\n");
-                if (g_bstr_response) SysFreeString(g_bstr_response);
-                g_bstr_response = char_to_bstr(body ? body + 4 : "");
-            } else {
-                 fprintf(stderr, "[libnfe.c] No data was read from the server.\n");
-                 fflush(stderr);
-                 if (g_bstr_response) SysFreeString(g_bstr_response);
-                 g_bstr_response = char_to_bstr("{\"error\": \"No data received from server.\"}");
-            }
-            free(response_buffer);
+            char* body = strstr(response_buffer, "\r\n\r\n");
+            if (g_bstr_response) SysFreeString(g_bstr_response);
+            g_bstr_response = char_to_bstr(body ? body + 4 : "");
+        } else {
+            fprintf(stderr, "[libnfe.c] No data was read from the server.\n");
+            fflush(stderr);
+            if (g_bstr_response) SysFreeString(g_bstr_response);
+            g_bstr_response = char_to_bstr("{\"error\": \"No data received from server.\"}");
         }
+        free(response_buffer);
     }
 
     EVP_PKEY_free(pkey);
@@ -319,7 +357,7 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
 
 __declspec(dllexport) BSTR NfeInutilizacao(const char* json_payload) {
     Config* config = load_config();
-    if (!config) return return_error("Failed to load or parse libnfe.cfg.");
+    if (!config) return return_error("Failed to load or parse libnfe.cfg.", 0);
     BSTR response = nfe_service_request(config->url_nfe_inutilizacao, config, json_payload);
     free_config(config);
     return response;
@@ -327,7 +365,7 @@ __declspec(dllexport) BSTR NfeInutilizacao(const char* json_payload) {
 
 __declspec(dllexport) BSTR NfeConsultaProtocolo(const char* json_payload) {
     Config* config = load_config();
-    if (!config) return return_error("Failed to load or parse libnfe.cfg.");
+    if (!config) return return_error("Failed to load or parse libnfe.cfg.", 0);
     BSTR response = nfe_service_request(config->url_nfe_consulta_protocolo, config, json_payload);
     free_config(config);
     return response;
@@ -335,7 +373,7 @@ __declspec(dllexport) BSTR NfeConsultaProtocolo(const char* json_payload) {
 
 __declspec(dllexport) BSTR NfeStatusServico(const char* json_payload) {
     Config* config = load_config();
-    if (!config) return return_error("Failed to load or parse libnfe.cfg.");
+    if (!config) return return_error("Failed to load or parse libnfe.cfg.", 0);
     BSTR response = nfe_service_request(config->url_nfe_status_servico, config, json_payload);
     free_config(config);
     return response;
@@ -343,7 +381,7 @@ __declspec(dllexport) BSTR NfeStatusServico(const char* json_payload) {
 
 __declspec(dllexport) BSTR NfeConsultaCadastro(const char* json_payload) {
     Config* config = load_config();
-    if (!config) return return_error("Failed to load or parse libnfe.cfg.");
+    if (!config) return return_error("Failed to load or parse libnfe.cfg.", 0);
     BSTR response = nfe_service_request(config->url_nfe_consulta_cadastro, config, json_payload);
     free_config(config);
     return response;
@@ -351,7 +389,7 @@ __declspec(dllexport) BSTR NfeConsultaCadastro(const char* json_payload) {
 
 __declspec(dllexport) BSTR RecepcaoEvento(const char* json_payload) {
     Config* config = load_config();
-    if (!config) return return_error("Failed to load or parse libnfe.cfg.");
+    if (!config) return return_error("Failed to load or parse libnfe.cfg.", 0);
     BSTR response = nfe_service_request(config->url_recepcao_evento, config, json_payload);
     free_config(config);
     return response;
@@ -359,7 +397,7 @@ __declspec(dllexport) BSTR RecepcaoEvento(const char* json_payload) {
 
 __declspec(dllexport) BSTR NFeAutorizacao(const char* json_payload) {
     Config* config = load_config();
-    if (!config) return return_error("Failed to load or parse libnfe.cfg.");
+    if (!config) return return_error("Failed to load or parse libnfe.cfg.", 0);
     BSTR response = nfe_service_request(config->url_nfe_autorizacao, config, json_payload);
     free_config(config);
     return response;
@@ -367,7 +405,7 @@ __declspec(dllexport) BSTR NFeAutorizacao(const char* json_payload) {
 
 __declspec(dllexport) BSTR NFeRetAutorizacao(const char* json_payload) {
     Config* config = load_config();
-    if (!config) return return_error("Failed to load or parse libnfe.cfg.");
+    if (!config) return return_error("Failed to load or parse libnfe.cfg.", 0);
     BSTR response = nfe_service_request(config->url_nfe_ret_autorizacao, config, json_payload);
     free_config(config);
     return response;
