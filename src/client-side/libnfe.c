@@ -255,21 +255,33 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     }
     BIO_set_conn_hostname(bio, host_and_port);
 
-    if (BIO_do_connect(bio) <= 0) {
+    SSL* ssl = NULL;
+    BIO_get_ssl(bio, &ssl);
+    if (!ssl) {
         free(final_payload);
         EVP_PKEY_free(pkey);
         X509_free(cert);
         BIO_free_all(bio);
         SSL_CTX_free(ssl_ctx);
         WSACleanup();
-        return return_error(BIO_should_retry(bio) ? "Connection timed out." : "Failed to connect to server.", 1);
+        return return_error("Failed to initialize SSL.", 1);
     }
 
-    SSL* ssl = NULL;
-    BIO_get_ssl(bio, &ssl);
+    if (BIO_do_connect(bio) <= 0) {
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "Failed to connect to server: %s", ERR_reason_error_string(ERR_get_error()));
+        free(final_payload);
+        EVP_PKEY_free(pkey);
+        X509_free(cert);
+        BIO_free_all(bio);
+        SSL_CTX_free(ssl_ctx);
+        WSACleanup();
+        return return_error(BIO_should_retry(bio) ? "Connection timed out." : err_msg, 1);
+    }
+
     long sock_fd = BIO_get_fd(bio, NULL);
     struct timeval tv;
-    tv.tv_sec = 5;
+    tv.tv_sec = 10; // Increased timeout to 10 seconds
     tv.tv_usec = 0;
     setsockopt((SOCKET)sock_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
 
@@ -296,8 +308,14 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         return return_error("Failed to allocate response buffer.", 1);
     }
 
+    int max_attempts = 10;
+    int attempts = 0;
     int len;
-    while ((len = BIO_read(bio, response_buffer + total_len, buffer_size - total_len - 1)) > 0) {
+    while ((len = BIO_read(bio, response_buffer + total_len, buffer_size - total_len - 1)) >= 0) {
+        if (len == 0) {
+            // Connection closed by server
+            break;
+        }
         total_len += len;
         if (total_len >= buffer_size - 1) {
             buffer_size *= 2;
@@ -313,12 +331,22 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
             }
             response_buffer = new_buffer;
         }
+        attempts++;
+        if (attempts >= max_attempts) {
+            free(response_buffer);
+            EVP_PKEY_free(pkey);
+            X509_free(cert);
+            BIO_free_all(bio);
+            SSL_CTX_free(ssl_ctx);
+            WSACleanup();
+            return return_error("Maximum read attempts reached.", 1);
+        }
     }
     
     fprintf(stderr, "[libnfe.c] BIO_read loop finished. Total bytes read: %zu\n", total_len);
     fflush(stderr);
 
-    if (total_len <= 0 && BIO_should_retry(bio)) {
+    if (len < 0 && BIO_should_retry(bio)) {
         free(response_buffer);
         EVP_PKEY_free(pkey);
         X509_free(cert);
@@ -328,24 +356,63 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         return return_error("Read operation timed out.", 1);
     }
 
-    if (response_buffer) {
-        if (total_len > 0) {
-            response_buffer[total_len] = '\0';
-            fprintf(stderr, "\n--- [libnfe.c] RAW RESPONSE BUFFER ---\n%s\n-------------------------------------\n", response_buffer);
-            fflush(stderr);
-
-            char* body = strstr(response_buffer, "\r\n\r\n");
-            if (g_bstr_response) SysFreeString(g_bstr_response);
-            g_bstr_response = char_to_bstr(body ? body + 4 : "");
-        } else {
-            fprintf(stderr, "[libnfe.c] No data was read from the server.\n");
-            fflush(stderr);
-            if (g_bstr_response) SysFreeString(g_bstr_response);
-            g_bstr_response = char_to_bstr("{\"error\": \"No data received from server.\"}");
-        }
+    if (total_len <= 0) {
         free(response_buffer);
+        EVP_PKEY_free(pkey);
+        X509_free(cert);
+        BIO_free_all(bio);
+        SSL_CTX_free(ssl_ctx);
+        WSACleanup();
+        return return_error("No data received from server.", 1);
     }
 
+    response_buffer[total_len] = '\0';
+    fprintf(stderr, "\n--- [libnfe.c] RAW RESPONSE BUFFER ---\n%s\n-------------------------------------\n", response_buffer);
+    fflush(stderr);
+
+    // Parse HTTP status code
+    int http_status = 0;
+    if (strncmp(response_buffer, "HTTP/1.1 ", 9) == 0) {
+        sscanf(response_buffer + 9, "%d", &http_status);
+        fprintf(stderr, "[libnfe.c] HTTP Status: %d\n", http_status);
+        fflush(stderr);
+    } else {
+        free(response_buffer);
+        EVP_PKEY_free(pkey);
+        X509_free(cert);
+        BIO_free_all(bio);
+        SSL_CTX_free(ssl_ctx);
+        WSACleanup();
+        return return_error("Invalid HTTP response format.", 1);
+    }
+
+    char* body = strstr(response_buffer, "\r\n\r\n");
+    if (!body) {
+        free(response_buffer);
+        EVP_PKEY_free(pkey);
+        X509_free(cert);
+        BIO_free_all(bio);
+        SSL_CTX_free(ssl_ctx);
+        WSACleanup();
+        return return_error("Invalid HTTP response format: No body found.", 1);
+    }
+    body += 4;
+
+    if (http_status != 200) {
+        char error_msg[1024];
+        snprintf(error_msg, sizeof(error_msg), "Server returned HTTP %d: %s", http_status, body);
+        free(response_buffer);
+        EVP_PKEY_free(pkey);
+        X509_free(cert);
+        BIO_free_all(bio);
+        SSL_CTX_free(ssl_ctx);
+        WSACleanup();
+        return return_error(error_msg, 1);
+    }
+
+    if (g_bstr_response) SysFreeString(g_bstr_response);
+    g_bstr_response = char_to_bstr(body);
+    free(response_buffer);
     EVP_PKEY_free(pkey);
     X509_free(cert);
     BIO_free_all(bio);
