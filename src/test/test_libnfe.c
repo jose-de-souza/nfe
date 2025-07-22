@@ -1,10 +1,14 @@
 #include <stdio.h>
 #include <windows.h>
 #include <oleauto.h>
+#include <objbase.h> // Required for COM initialization
 #include "cJSON.h"
 
+// This is mandatory for OpenSSL 3.x with MSVC to link to the application's C runtime.
+#include <openssl/applink.c> 
+
 #pragma comment(lib, "user32.lib")
-#pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "ole32.lib")     // Required for CoInitializeEx
 #pragma comment(lib, "oleaut32.lib")
 
 typedef BSTR (*NFeFunction)(const char*);
@@ -52,13 +56,20 @@ char* ReadFileToString(const char* filename) {
 }
 
 int main() {
+    if (FAILED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED))) {
+        printf("Failed to initialize COM library\n");
+        return 1;
+    }
+
     const char* lib_dir = getenv("LIBNFE_LIBS_DIR");
     if (!lib_dir) lib_dir = "libs";
     char dll_path[MAX_PATH];
     snprintf(dll_path, MAX_PATH, "%s\\libnfe.dll", lib_dir);
+    
     HMODULE lib = LoadLibraryA(dll_path);
     if (!lib) {
         printf("Failed to load %s. Make sure it is in the '%s' subdirectory.\n", dll_path, lib_dir);
+        CoUninitialize();
         return 1;
     }
     printf("libnfe.dll loaded successfully.\n\n");
@@ -69,12 +80,14 @@ int main() {
     if (!NfeStatusServico || !NFeAutorizacao) {
         printf("Failed to get one or more function pointers from the DLL.\n");
         FreeLibrary(lib);
+        CoUninitialize();
         return 1;
     }
 
     char* status_payload = ReadFileToString("status_servico.json");
     if (!status_payload) {
         FreeLibrary(lib);
+        CoUninitialize();
         return 1;
     }
     
@@ -90,6 +103,7 @@ int main() {
     char* json_nfe_payload = ReadFileToString("nfe.json");
     if (!json_nfe_payload) {
         FreeLibrary(lib);
+        CoUninitialize();
         return 1;
     }
 
@@ -100,11 +114,13 @@ int main() {
     printf("Response: ");
     PrintBstr(bstr_nfe_response);
     printf("\n");
-
     free(json_nfe_payload);
+    
     FreeLibrary(lib);
 
     printf("Tests finished. Press Enter to exit.\n");
     getchar();
+
+    CoUninitialize();
     return 0;
 }
