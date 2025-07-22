@@ -9,9 +9,6 @@
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
 
-// The function signature now correctly returns a BSTR
-typedef BSTR (*NFeFunction)(const char*);
-
 // Helper function to print a BSTR to the console
 void PrintBstr(BSTR bstr) {
     if (bstr != NULL) {
@@ -20,6 +17,7 @@ void PrintBstr(BSTR bstr) {
     } else {
         printf("(null)\n");
     }
+    fflush(stdout); // Force the output to be written to the console
 }
 
 // Helper function to read a JSON file into a string
@@ -33,6 +31,7 @@ char* ReadFileToString(const char* filename) {
     FILE* fp = fopen(full_path, "r");
     if (!fp) {
         printf("Failed to open %s\n", full_path);
+        fflush(stdout);
         return NULL;
     }
     fseek(fp, 0, SEEK_END);
@@ -41,6 +40,7 @@ char* ReadFileToString(const char* filename) {
     char* buffer = (char*)malloc(size + 1);
     if (!buffer) {
         printf("Failed to allocate memory for %s\n", full_path);
+        fflush(stdout);
         fclose(fp);
         return NULL;
     }
@@ -52,6 +52,7 @@ char* ReadFileToString(const char* filename) {
     cJSON* json = cJSON_Parse(buffer);
     if (!json) {
         printf("Invalid JSON in %s: %s\n", full_path, cJSON_GetErrorPtr());
+        fflush(stdout);
         free(buffer);
         return NULL;
     }
@@ -63,6 +64,7 @@ int main() {
     // Initialize the COM library for the current thread
     if (FAILED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED))) {
         printf("Failed to initialize COM library\n");
+        fflush(stdout);
         return 1;
     }
 
@@ -75,17 +77,25 @@ int main() {
     HMODULE lib = LoadLibraryA(dll_path);
     if (!lib) {
         printf("Failed to load %s. Make sure it is in the '%s' subdirectory.\n", dll_path, lib_dir);
+        fflush(stdout);
         CoUninitialize();
         return 1;
     }
     printf("libnfe.dll loaded successfully.\n\n");
+    fflush(stdout);
 
-    // Get pointers to the exported functions from the DLL
-    NFeFunction NfeStatusServico = (NFeFunction)GetProcAddress(lib, "NfeStatusServico");
-    NFeFunction NFeAutorizacao = (NFeFunction)GetProcAddress(lib, "NFeAutorizacao");
+    // Define function pointers with the explicit, standard syntax
+    BSTR (*NfeStatusServico)(const char*);
+    BSTR (*NFeAutorizacao)(const char*);
+
+    // Cast the result of GetProcAddress to the correct function pointer type
+    NfeStatusServico = (BSTR (*)(const char*))GetProcAddress(lib, "NfeStatusServico");
+    NFeAutorizacao = (BSTR (*)(const char*))GetProcAddress(lib, "NFeAutorizacao");
+
 
     if (!NfeStatusServico || !NFeAutorizacao) {
         printf("Failed to get one or more function pointers from the DLL.\n");
+        fflush(stdout);
         FreeLibrary(lib);
         CoUninitialize();
         return 1;
@@ -101,11 +111,13 @@ int main() {
     
     printf("Testing NfeStatusServico...\n");
     printf("Payload: (from %s\\status_servico.json)\n", getenv("LIBNFE_TEST_DIR") ? getenv("LIBNFE_TEST_DIR") : "test");
+    fflush(stdout);
     
     BSTR bstr_status_response = NfeStatusServico(status_payload);
     printf("Response: ");
-    PrintBstr(bstr_status_response);
+    PrintBstr(bstr_status_response); // PrintBstr now contains a flush
     printf("\n");
+    fflush(stdout);
     free(status_payload);
 
     // --- Test NFeAutorizacao ---
@@ -118,17 +130,20 @@ int main() {
 
     printf("Testing NFeAutorizacao...\n");
     printf("Payload: (from %s\\nfe.json)\n", getenv("LIBNFE_TEST_DIR") ? getenv("LIBNFE_TEST_DIR") : "test");
+    fflush(stdout);
 
     BSTR bstr_nfe_response = NFeAutorizacao(json_nfe_payload);
     printf("Response: ");
-    PrintBstr(bstr_nfe_response);
+    PrintBstr(bstr_nfe_response); // PrintBstr now contains a flush
     printf("\n");
+    fflush(stdout);
     free(json_nfe_payload);
     
     // Clean up resources
     FreeLibrary(lib);
 
     printf("Tests finished.\n");
+    fflush(stdout);
 
     // Uninitialize the COM library before exiting
     CoUninitialize();
