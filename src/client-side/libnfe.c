@@ -65,9 +65,10 @@ static BSTR char_to_bstr(const char* utf8_str) {
 }
 
 static BSTR return_error(const char* msg) {
-    char error_json[512];
+    char error_json[1024];
     snprintf(error_json, sizeof(error_json), "{\"error\": \"%s\"}", msg);
-    fprintf(stderr, "ERROR: %s\n", msg);
+    fprintf(stderr, "FATAL ERROR: %s\n", msg);
+    ERR_print_errors_fp(stderr);
     if (g_bstr_response) SysFreeString(g_bstr_response);
     g_bstr_response = char_to_bstr(error_json);
     return g_bstr_response;
@@ -155,7 +156,6 @@ static Config* load_config() {
     }
     fclose(file);
 
-    // Validate configuration
     if (!config->certificate_path || !config->certificate_pass || !config->cacerts_path ||
         !config->sefaz || !config->url_nfe_inutilizacao || !config->url_nfe_consulta_protocolo ||
         !config->url_nfe_status_servico || !config->url_nfe_consulta_cadastro ||
@@ -196,11 +196,9 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     OPENSSL_init_ssl(0, NULL);
     SSL_CTX* ssl_ctx = SSL_CTX_new(TLS_client_method());
     if (!ssl_ctx) {
-        char err_buf[256];
-        ERR_error_string(ERR_get_error(), err_buf);
         free(final_payload);
         WSACleanup();
-        return return_error(err_buf);
+        return return_error("Failed to create SSL_CTX");
     }
 
     fprintf(stderr, "DEBUG: Loading certificate from %s\n", config->certificate_path);
@@ -214,39 +212,39 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     PKCS12* pfx = d2i_PKCS12_fp(pfx_file, NULL);
     fclose(pfx_file);
     if (!pfx) {
-        char err_buf[256];
-        ERR_error_string(ERR_get_error(), err_buf);
         free(final_payload);
         SSL_CTX_free(ssl_ctx);
         WSACleanup();
-        return return_error(err_buf);
+        return return_error("Failed to parse PFX file.");
     }
 
     EVP_PKEY* pkey = NULL;
     X509* cert = NULL;
     fprintf(stderr, "DEBUG: Parsing PKCS12 with password\n");
     if (!PKCS12_parse(pfx, config->certificate_pass, &pkey, &cert, NULL)) {
-        char err_buf[256];
-        ERR_error_string(ERR_get_error(), err_buf);
         free(final_payload);
         PKCS12_free(pfx);
         SSL_CTX_free(ssl_ctx);
         WSACleanup();
-        return return_error(err_buf);
+        return return_error("Failed to parse PKCS12 data. Check password.");
     }
     PKCS12_free(pfx);
 
     if (SSL_CTX_use_certificate(ssl_ctx, cert) <= 0 || SSL_CTX_use_PrivateKey(ssl_ctx, pkey) <= 0) {
-        char err_buf[256];
-        ERR_error_string(ERR_get_error(), err_buf);
         EVP_PKEY_free(pkey);
         X509_free(cert);
         SSL_CTX_free(ssl_ctx);
         WSACleanup();
-        return return_error(err_buf);
+        return return_error("Failed to use client certificate or private key.");
     }
     fprintf(stderr, "DEBUG: Loading CA certificates from %s\n", config->cacerts_path);
-    SSL_CTX_load_verify_locations(ssl_ctx, config->cacerts_path, NULL);
+    if (SSL_CTX_load_verify_locations(ssl_ctx, config->cacerts_path, NULL) != 1) {
+        EVP_PKEY_free(pkey);
+        X509_free(cert);
+        SSL_CTX_free(ssl_ctx);
+        WSACleanup();
+        return return_error("Failed to load CA certificate.");
+    }
 
     const char *url_prefix = "https://";
     const char *host_start = service_url;
@@ -282,33 +280,28 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     fprintf(stderr, "DEBUG: Connecting to %s\n", host_and_port);
     BIO* bio = BIO_new_ssl_connect(ssl_ctx);
     if (!bio) {
-        char err_buf[256];
-        ERR_error_string(ERR_get_error(), err_buf);
         free(final_payload);
         EVP_PKEY_free(pkey);
         X509_free(cert);
         SSL_CTX_free(ssl_ctx);
         WSACleanup();
-        return return_error(err_buf);
+        return return_error("Failed to create BIO object.");
     }
     BIO_set_conn_hostname(bio, host_and_port);
 
     if (BIO_do_connect(bio) <= 0) {
-        char err_buf[256];
-        ERR_error_string(ERR_get_error(), err_buf);
         free(final_payload);
         EVP_PKEY_free(pkey);
         X509_free(cert);
         BIO_free_all(bio);
         SSL_CTX_free(ssl_ctx);
         WSACleanup();
-        return return_error(err_buf);
+        return return_error("Failed to connect to server.");
     }
+    fprintf(stderr, "DEBUG: Connection successful.\n");
 
     size_t payload_len = strlen(final_payload);
-    size_t request_len = snprintf(NULL, 0, "POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n%s",
-        path, host_and_port, payload_len, final_payload) + 1;
-    char* request = (char*)malloc(request_len);
+    char* request = (char*)malloc(payload_len + 1024);
     if (!request) {
         free(final_payload);
         EVP_PKEY_free(pkey);
@@ -318,16 +311,19 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         WSACleanup();
         return return_error("Failed to allocate request buffer.");
     }
-    snprintf(request, request_len, "POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n%s",
+    int request_len = sprintf(request, "POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n%s",
         path, host_and_port, payload_len, final_payload);
-    BIO_write(bio, request, request_len - 1);
+    
+    fprintf(stderr, "DEBUG: Writing HTTP request...\n");
+    BIO_write(bio, request, request_len);
+    fprintf(stderr, "DEBUG: Flushing BIO buffer...\n");
+    BIO_flush(bio); // Explicitly flush the buffer to send the data
+    fprintf(stderr, "DEBUG: Flush complete. Waiting for response...\n");
+
     free(request);
     free(final_payload);
 
-    char* response_buffer = NULL;
-    size_t buffer_size = 8192;
-    size_t total_len = 0;
-    response_buffer = (char*)malloc(buffer_size);
+    char* response_buffer = (char*)malloc(8192);
     if (!response_buffer) {
         EVP_PKEY_free(pkey);
         X509_free(cert);
@@ -337,29 +333,18 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         return return_error("Failed to allocate response buffer.");
     }
 
-    int len;
-    while ((len = BIO_read(bio, response_buffer + total_len, buffer_size - total_len - 1)) > 0) {
-        total_len += len;
-        if (total_len >= buffer_size - 1) {
-            buffer_size *= 2;
-            char* new_buffer = (char*)realloc(response_buffer, buffer_size);
-            if (!new_buffer) {
-                free(response_buffer);
-                EVP_PKEY_free(pkey);
-                X509_free(cert);
-                BIO_free_all(bio);
-                SSL_CTX_free(ssl_ctx);
-                WSACleanup();
-                return return_error("Failed to reallocate response buffer.");
-            }
-            response_buffer = new_buffer;
-        }
-    }
-    response_buffer[total_len] = '\0';
+    int len = BIO_read(bio, response_buffer, 8191);
+    fprintf(stderr, "DEBUG: BIO_read returned %d\n", len);
 
-    char* body = strstr(response_buffer, "\r\n\r\n");
-    if (g_bstr_response) SysFreeString(g_bstr_response);
-    g_bstr_response = char_to_bstr(body ? body + 4 : "");
+    if (len > 0) {
+        response_buffer[len] = '\0';
+        char* body = strstr(response_buffer, "\r\n\r\n");
+        if (g_bstr_response) SysFreeString(g_bstr_response);
+        g_bstr_response = char_to_bstr(body ? body + 4 : "");
+    } else {
+        return_error("Failed to read response from server.");
+    }
+
     free(response_buffer);
     EVP_PKEY_free(pkey);
     X509_free(cert);
