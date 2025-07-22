@@ -117,3 +117,13 @@ dumpbin /headers build\libnfe.dll |find "machine"
 ```bash
 openssl s_client -connect homologacao.nfe.sefa.pr.gov.br:443 -showcerts > cacerts.pem
 ```
+## Create a Firewall rule to allow mTLS locally
+### Find out the exact python.exe location
+On Powershell (Admin not needed)
+```bash
+(Get-Command python).Source
+```
+Then run on Powershell as Admin:
+```bash
+New-NetFirewallRule -DisplayName "Allow NFe Service (Python)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5001 -Program "C:\Program Files\Python313\python.exe"
+```

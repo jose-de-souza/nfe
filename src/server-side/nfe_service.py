@@ -7,29 +7,33 @@ from functools import wraps
 app = Flask(__name__)
 
 # --- Configuration ---
+# In a real application, these would come from environment variables or a secure config file.
 app.config['DATABASE_HOST'] = 'localhost'
 app.config['DATABASE_USER'] = 'nfe_user'
 app.config['DATABASE_PASSWORD'] = 'your_strong_password'
 app.config['DATABASE_NAME'] = 'nfe_db'
 
 TRUSTED_CLIENTS = {
-    "THUMBPRINT_OF_CLIENT_CERT_1": "company_A_id",
+    # In production, you would map client certificate thumbprints to client IDs
+    # e.g., "SHA256_THUMBPRINT_HERE": "client_id_123",
 }
 
-# --- Security: mTLS Authentication ---
+# --- Security: mTLS Authentication Decorator ---
 def require_mtls(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # The SSL context configuration ensures a certificate is present.
+        # This retrieves the certificate details presented by the client.
         cert = request.environ.get('werkzeug.socket').getpeercert()
-        if not cert:
-            return jsonify({"error": "Client certificate required."}), 401
         
-        # Proper thumbprint validation should be implemented here.
-        # For now, we proceed assuming the client is trusted.
+        # Proper thumbprint validation should be implemented here for production.
+        # For this test, we just confirm that a certificate was received.
+        print(f"Client certificate received: {cert.get('subject', 'N/A')}")
         
         if not request.is_json:
             return jsonify({"error": "Request must be JSON"}), 400
         
+        # The client wraps the original payload with config context.
         data = request.get_json()
         g.payload = data.get('payload')
         g.config = data.get('config')
@@ -42,6 +46,7 @@ def require_mtls(f):
     return decorated_function
 
 # --- API Endpoints ---
+# Each endpoint is protected by the mTLS decorator.
 
 @app.route('/api/v1/nfe/autorizacao', methods=['POST'])
 @require_mtls
@@ -76,6 +81,7 @@ def nfe_consulta_protocolo():
 def nfe_status_servico():
     print(f"Processing NfeStatusServico with payload: {g.payload}")
     # TODO: Implement business logic for NfeStatusServico
+    # This endpoint now returns a successful response for the test.
     return jsonify({"status": "ok", "operation": "NfeStatusServico", "cStat": "107", "xMotivo": "Servico em Operacao"}), 200
 
 @app.route('/api/v1/nfe/consulta-cadastro', methods=['POST'])
@@ -94,7 +100,18 @@ def nfe_recepcao_evento():
 
 # --- Main Execution ---
 if __name__ == '__main__':
+    # Create a server-side SSL context
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    
+    # Load the server's own certificate and private key
     context.load_cert_chain('C:\\madeiras\\erp\\service\\server.crt', 'C:\\madeiras\\erp\\service\\server.key')
+    
+    # Load the Certificate Authority (CA) certificate used to sign trusted client certs
     context.load_verify_locations('C:\\madeiras\\erp\\service\\cacerts.pem')
+    
+    # This line is essential for mTLS: it tells the server to require a client
+    # certificate and validate it against the loaded CA.
+    context.verify_mode = ssl.CERT_REQUIRED
+    
+    # Run the Flask development server with the configured SSL context
     run_simple('0.0.0.0', 5001, app, ssl_context=context)
