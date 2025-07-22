@@ -66,9 +66,9 @@ echo [INFO] Certificate thumbprint: %TEST_CLIENT_THUMBPRINT%
 del %CERT_PEM% >nul 2>&1
 del %THUMBPRINT_FILE% >nul 2>&1
 
-:: Start the local server in the background
-echo [INFO] Starting local nfe_service.py...
-start /b python C:\madeiras\erp\service\nfe_service.py
+:: Start the local server in a new terminal
+echo [INFO] Starting local nfe_service.py in a new terminal...
+start "NFe Service" python C:\madeiras\erp\service\nfe_service.py
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Failed to start nfe_service.py.
     exit /b 1
