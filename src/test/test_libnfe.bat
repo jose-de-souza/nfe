@@ -69,4 +69,3 @@ if defined PYTHON_PID (
 
 echo [INFO] Cleanup complete.
 endlocal
-pause

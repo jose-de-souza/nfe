@@ -127,3 +127,9 @@ Then run on Powershell as Admin:
 ```bash
 New-NetFirewallRule -DisplayName "Allow NFe Service (Python)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5001 -Program "C:\Program Files\Python313\python.exe"
 ```
+
+## Test the Local server
+
+```bash
+curl -v --cert C:\madeiras\erp\certificates\certificate.pfx:123 --cacert C:\madeiras\erp\certificates\cacerts.pem -X POST -H "Content-Type: application/json" -d "{\"consStatServ\":{\"versao\":\"4.00\",\"tpAmb\":\"2\",\"cUF\":\"41\",\"xServ\":\"STATUS\"}}" https://localhost:5001/api/v1/nfe/status-servico
+```

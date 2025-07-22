@@ -3,28 +3,31 @@
 #include <oleauto.h>
 #include <objbase.h> // Required for COM initialization
 #include "cJSON.h"
-
-// This is mandatory for OpenSSL 3.x with MSVC to link to the application's C runtime.
-#include <openssl/applink.c> 
+#include <openssl/applink.c> // Required for OpenSSL + MSVC
 
 #pragma comment(lib, "user32.lib")
-#pragma comment(lib, "ole32.lib")     // Required for CoInitializeEx
+#pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
 
+// The function signature now correctly returns a BSTR
 typedef BSTR (*NFeFunction)(const char*);
 
+// Helper function to print a BSTR to the console
 void PrintBstr(BSTR bstr) {
     if (bstr != NULL) {
+        // Use wprintf for wide-character BSTR strings
         wprintf(L"%s\n", bstr);
     } else {
         printf("(null)\n");
     }
 }
 
+// Helper function to read a JSON file into a string
 char* ReadFileToString(const char* filename) {
     char full_path[MAX_PATH];
+    // Use the LIBNFE_TEST_DIR environment variable to find the test files
     const char* test_dir = getenv("LIBNFE_TEST_DIR");
-    if (!test_dir) test_dir = "test";
+    if (!test_dir) test_dir = "test"; // Default to a 'test' subdirectory
     snprintf(full_path, MAX_PATH, "%s\\%s", test_dir, filename);
 
     FILE* fp = fopen(full_path, "r");
@@ -45,6 +48,7 @@ char* ReadFileToString(const char* filename) {
     buffer[read_size] = '\0';
     fclose(fp);
 
+    // Basic validation to ensure the file content is valid JSON
     cJSON* json = cJSON_Parse(buffer);
     if (!json) {
         printf("Invalid JSON in %s: %s\n", full_path, cJSON_GetErrorPtr());
@@ -56,13 +60,15 @@ char* ReadFileToString(const char* filename) {
 }
 
 int main() {
+    // Initialize the COM library for the current thread
     if (FAILED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED))) {
         printf("Failed to initialize COM library\n");
         return 1;
     }
 
+    // Use the LIBNFE_LIBS_DIR environment variable to find the DLL
     const char* lib_dir = getenv("LIBNFE_LIBS_DIR");
-    if (!lib_dir) lib_dir = "libs";
+    if (!lib_dir) lib_dir = "libs"; // Default to a 'libs' subdirectory
     char dll_path[MAX_PATH];
     snprintf(dll_path, MAX_PATH, "%s\\libnfe.dll", lib_dir);
     
@@ -74,6 +80,7 @@ int main() {
     }
     printf("libnfe.dll loaded successfully.\n\n");
 
+    // Get pointers to the exported functions from the DLL
     NFeFunction NfeStatusServico = (NFeFunction)GetProcAddress(lib, "NfeStatusServico");
     NFeFunction NFeAutorizacao = (NFeFunction)GetProcAddress(lib, "NFeAutorizacao");
 
@@ -84,6 +91,7 @@ int main() {
         return 1;
     }
 
+    // --- Test NfeStatusServico ---
     char* status_payload = ReadFileToString("status_servico.json");
     if (!status_payload) {
         FreeLibrary(lib);
@@ -100,6 +108,7 @@ int main() {
     printf("\n");
     free(status_payload);
 
+    // --- Test NFeAutorizacao ---
     char* json_nfe_payload = ReadFileToString("nfe.json");
     if (!json_nfe_payload) {
         FreeLibrary(lib);
@@ -116,11 +125,12 @@ int main() {
     printf("\n");
     free(json_nfe_payload);
     
+    // Clean up resources
     FreeLibrary(lib);
 
-    printf("Tests finished. Press Enter to exit.\n");
-    getchar();
+    printf("Tests finished.\n");
 
+    // Uninitialize the COM library before exiting
     CoUninitialize();
     return 0;
 }

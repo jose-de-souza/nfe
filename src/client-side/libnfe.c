@@ -41,13 +41,11 @@ static BSTR g_bstr_response = NULL;
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
     if (fdwReason == DLL_PROCESS_ATTACH) {
         hModule_this_dll = hinstDLL;
-        fprintf(stderr, "DEBUG: DllMain - DLL_PROCESS_ATTACH\n");
     } else if (fdwReason == DLL_PROCESS_DETACH) {
         if (g_bstr_response) {
             SysFreeString(g_bstr_response);
             g_bstr_response = NULL;
         }
-        fprintf(stderr, "DEBUG: DllMain - DLL_PROCESS_DETACH\n");
     }
     return TRUE;
 }
@@ -96,24 +94,18 @@ static Config* load_config() {
     const char* config_dir = getenv("LIBNFE_CONFIG_DIR");
     if (!config_dir) config_dir = getenv("USERPROFILE");
 
-    fprintf(stderr, "DEBUG: LIBNFE_CONFIG_DIR=%s\n", config_dir ? config_dir : "NULL");
-
     if (GetModuleFileNameA(hModule_this_dll, dll_path, MAX_PATH) == 0) {
-        fprintf(stderr, "ERROR: Failed to get DLL module path.\n");
         return NULL;
     }
 
     strncpy(app_home_dir, dll_path, MAX_PATH);
     PathRemoveFileSpecA(app_home_dir);
     PathRemoveFileSpecA(app_home_dir);
-    fprintf(stderr, "DEBUG: app_home_dir=%s\n", app_home_dir);
 
     snprintf(config_path, MAX_PATH, "%s\\libnfe.cfg", config_dir ? config_dir : app_home_dir);
-    fprintf(stderr, "DEBUG: Attempting to open config file: %s\n", config_path);
 
     FILE* file = fopen(config_path, "r");
     if (!file) {
-        fprintf(stderr, "ERROR: Failed to open %s.\n", config_path);
         return NULL;
     }
 
@@ -130,16 +122,12 @@ static Config* load_config() {
         char* value = strtok(NULL, "\n\r");
         if (key && value) {
             while (isspace((unsigned char)*value)) value++;
-            fprintf(stderr, "DEBUG: Parsed config: key=%s, value=%s\n", key, value);
-
             #define SET_CONFIG_STR(cfg_key, field) if (_stricmp(key, cfg_key) == 0) config->field = _strdup(value)
             #define SET_CONFIG_PATH(cfg_key, field) if (_stricmp(key, cfg_key) == 0) { \
                 char full_path[MAX_PATH]; \
                 if (PathIsRelativeA(value)) { snprintf(full_path, MAX_PATH, "%s\\%s", app_home_dir, value); config->field = _strdup(full_path); } \
                 else { config->field = _strdup(value); } \
-                fprintf(stderr, "DEBUG: Set %s=%s\n", cfg_key, config->field); \
             }
-
             SET_CONFIG_PATH("certificate_path", certificate_path);
             SET_CONFIG_STR("certificate_pass", certificate_pass);
             SET_CONFIG_PATH("cacerts_path", cacerts_path);
@@ -155,22 +143,11 @@ static Config* load_config() {
         }
     }
     fclose(file);
-
-    if (!config->certificate_path || !config->certificate_pass || !config->cacerts_path ||
-        !config->sefaz || !config->url_nfe_inutilizacao || !config->url_nfe_consulta_protocolo ||
-        !config->url_nfe_status_servico || !config->url_nfe_consulta_cadastro ||
-        !config->url_recepcao_evento || !config->url_nfe_autorizacao || !config->url_nfe_ret_autorizacao) {
-        free_config(config);
-        return NULL;
-    }
-
     return config;
 }
 
 static BSTR nfe_service_request(const char* service_url, const Config* config, const char* user_payload) {
-    if (!service_url) return return_error("Service URL for this operation is not defined in libnfe.cfg");
-
-    fprintf(stderr, "DEBUG: Initializing nfe_service_request for URL: %s\n", service_url);
+    if (!service_url) return return_error("Service URL not defined");
 
     cJSON* wrapper = cJSON_CreateObject();
     cJSON* config_json = cJSON_CreateObject();
@@ -192,7 +169,6 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         return return_error("Winsock init failed");
     }
 
-    fprintf(stderr, "DEBUG: Initializing OpenSSL\n");
     OPENSSL_init_ssl(0, NULL);
     SSL_CTX* ssl_ctx = SSL_CTX_new(TLS_client_method());
     if (!ssl_ctx) {
@@ -201,7 +177,6 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         return return_error("Failed to create SSL_CTX");
     }
 
-    fprintf(stderr, "DEBUG: Loading certificate from %s\n", config->certificate_path);
     FILE* pfx_file = fopen(config->certificate_path, "rb");
     if (!pfx_file) {
         free(final_payload);
@@ -220,7 +195,6 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
 
     EVP_PKEY* pkey = NULL;
     X509* cert = NULL;
-    fprintf(stderr, "DEBUG: Parsing PKCS12 with password\n");
     if (!PKCS12_parse(pfx, config->certificate_pass, &pkey, &cert, NULL)) {
         free(final_payload);
         PKCS12_free(pfx);
@@ -237,7 +211,6 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         WSACleanup();
         return return_error("Failed to use client certificate or private key.");
     }
-    fprintf(stderr, "DEBUG: Loading CA certificates from %s\n", config->cacerts_path);
     if (SSL_CTX_load_verify_locations(ssl_ctx, config->cacerts_path, NULL) != 1) {
         EVP_PKEY_free(pkey);
         X509_free(cert);
@@ -247,46 +220,18 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     }
 
     const char *url_prefix = "https://";
-    const char *host_start = service_url;
-    if (strncmp(service_url, url_prefix, strlen(url_prefix)) == 0) {
-        host_start += strlen(url_prefix);
-    }
-
+    const char *host_start = (strncmp(service_url, url_prefix, strlen(url_prefix)) == 0) ? service_url + strlen(url_prefix) : service_url;
     const char *path_start = strchr(host_start, '/');
     if (!path_start) {
-        free(final_payload);
-        EVP_PKEY_free(pkey);
-        X509_free(cert);
-        SSL_CTX_free(ssl_ctx);
-        WSACleanup();
-        return return_error("Invalid service URL format: no path found.");
+        return return_error("Invalid service URL format.");
     }
-
     char host_and_port[256];
     size_t host_len = path_start - host_start;
-    if (host_len >= sizeof(host_and_port)) {
-        free(final_payload);
-        EVP_PKEY_free(pkey);
-        X509_free(cert);
-        SSL_CTX_free(ssl_ctx);
-        WSACleanup();
-        return return_error("Service URL hostname is too long.");
-    }
     strncpy(host_and_port, host_start, host_len);
     host_and_port[host_len] = '\0';
-
     const char *path = path_start;
 
-    fprintf(stderr, "DEBUG: Connecting to %s\n", host_and_port);
     BIO* bio = BIO_new_ssl_connect(ssl_ctx);
-    if (!bio) {
-        free(final_payload);
-        EVP_PKEY_free(pkey);
-        X509_free(cert);
-        SSL_CTX_free(ssl_ctx);
-        WSACleanup();
-        return return_error("Failed to create BIO object.");
-    }
     BIO_set_conn_hostname(bio, host_and_port);
 
     if (BIO_do_connect(bio) <= 0) {
@@ -298,54 +243,59 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         WSACleanup();
         return return_error("Failed to connect to server.");
     }
-    fprintf(stderr, "DEBUG: Connection successful.\n");
 
+    // --- Set Socket Timeout to Prevent Freezing ---
+    SSL* ssl = NULL;
+    BIO_get_ssl(bio, &ssl);
+    long sock_fd = BIO_get_fd(bio, NULL);
+    struct timeval tv;
+    tv.tv_sec = 5;  // 5 second timeout
+    tv.tv_usec = 0;
+    setsockopt((SOCKET)sock_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+
+
+    char request_header[1024];
     size_t payload_len = strlen(final_payload);
-    char* request = (char*)malloc(payload_len + 1024);
-    if (!request) {
-        free(final_payload);
-        EVP_PKEY_free(pkey);
-        X509_free(cert);
-        BIO_free_all(bio);
-        SSL_CTX_free(ssl_ctx);
-        WSACleanup();
-        return return_error("Failed to allocate request buffer.");
-    }
-    int request_len = sprintf(request, "POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n%s",
-        path, host_and_port, payload_len, final_payload);
+    int header_len = sprintf(request_header, "POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",
+        path, host_and_port, payload_len);
     
-    fprintf(stderr, "DEBUG: Writing HTTP request...\n");
-    BIO_write(bio, request, request_len);
-    fprintf(stderr, "DEBUG: Flushing BIO buffer...\n");
-    BIO_flush(bio); // Explicitly flush the buffer to send the data
-    fprintf(stderr, "DEBUG: Flush complete. Waiting for response...\n");
-
-    free(request);
+    BIO_write(bio, request_header, header_len);
+    BIO_write(bio, final_payload, payload_len);
+    BIO_flush(bio);
     free(final_payload);
 
-    char* response_buffer = (char*)malloc(8192);
+    char* response_buffer = NULL;
+    size_t buffer_size = 8192;
+    size_t total_len = 0;
+    response_buffer = (char*)malloc(buffer_size);
     if (!response_buffer) {
-        EVP_PKEY_free(pkey);
-        X509_free(cert);
-        BIO_free_all(bio);
-        SSL_CTX_free(ssl_ctx);
-        WSACleanup();
-        return return_error("Failed to allocate response buffer.");
-    }
-
-    int len = BIO_read(bio, response_buffer, 8191);
-    fprintf(stderr, "DEBUG: BIO_read returned %d\n", len);
-
-    if (len > 0) {
-        response_buffer[len] = '\0';
-        char* body = strstr(response_buffer, "\r\n\r\n");
-        if (g_bstr_response) SysFreeString(g_bstr_response);
-        g_bstr_response = char_to_bstr(body ? body + 4 : "");
+        return_error("Failed to allocate response buffer.");
     } else {
-        return_error("Failed to read response from server.");
+        int len;
+        while ((len = BIO_read(bio, response_buffer + total_len, buffer_size - total_len - 1)) > 0) {
+            total_len += len;
+            if (total_len >= buffer_size - 1) {
+                buffer_size *= 2;
+                char* new_buffer = (char*)realloc(response_buffer, buffer_size);
+                if (!new_buffer) {
+                    free(response_buffer);
+                    return_error("Failed to reallocate response buffer.");
+                    response_buffer = NULL;
+                    break;
+                }
+                response_buffer = new_buffer;
+            }
+        }
+        
+        if (response_buffer) {
+            response_buffer[total_len] = '\0';
+            char* body = strstr(response_buffer, "\r\n\r\n");
+            if (g_bstr_response) SysFreeString(g_bstr_response);
+            g_bstr_response = char_to_bstr(body ? body + 4 : "");
+            free(response_buffer);
+        }
     }
 
-    free(response_buffer);
     EVP_PKEY_free(pkey);
     X509_free(cert);
     BIO_free_all(bio);
