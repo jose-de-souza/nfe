@@ -30,7 +30,7 @@ char* ReadFileToString(const char* filename) {
 
     FILE* fp = fopen(full_path, "r");
     if (!fp) {
-        printf("Failed to open %s\n", full_path);
+        printf("[test_libnfe.c] Failed to open %s\n", full_path);
         fflush(stdout);
         return NULL;
     }
@@ -39,7 +39,7 @@ char* ReadFileToString(const char* filename) {
     fseek(fp, 0, SEEK_SET);
     char* buffer = (char*)malloc(size + 1);
     if (!buffer) {
-        printf("Failed to allocate memory for %s\n", full_path);
+        printf("[test_libnfe.c] Failed to allocate memory for %s\n", full_path);
         fflush(stdout);
         fclose(fp);
         return NULL;
@@ -51,7 +51,7 @@ char* ReadFileToString(const char* filename) {
     // Basic validation to ensure the file content is valid JSON
     cJSON* json = cJSON_Parse(buffer);
     if (!json) {
-        printf("Invalid JSON in %s: %s\n", full_path, cJSON_GetErrorPtr());
+        printf("[test_libnfe.c] Invalid JSON in %s: %s\n", full_path, cJSON_GetErrorPtr());
         fflush(stdout);
         free(buffer);
         return NULL;
@@ -63,7 +63,7 @@ char* ReadFileToString(const char* filename) {
 int main() {
     // Initialize the COM library for the current thread
     if (FAILED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED))) {
-        printf("Failed to initialize COM library\n");
+        printf("[test_libnfe.c] Failed to initialize COM library\n");
         fflush(stdout);
         return 1;
     }
@@ -76,12 +76,12 @@ int main() {
     
     HMODULE lib = LoadLibraryA(dll_path);
     if (!lib) {
-        printf("Failed to load %s. Make sure it is in the '%s' subdirectory.\n", dll_path, lib_dir);
+        printf("[test_libnfe.c] Failed to load %s.\n", dll_path);
         fflush(stdout);
         CoUninitialize();
         return 1;
     }
-    printf("libnfe.dll loaded successfully.\n\n");
+    printf("[test_libnfe.c] libnfe.dll loaded successfully.\n\n");
     fflush(stdout);
 
     // Define function pointers with the explicit, standard syntax
@@ -94,7 +94,7 @@ int main() {
 
 
     if (!NfeStatusServico || !NFeAutorizacao) {
-        printf("Failed to get one or more function pointers from the DLL.\n");
+        printf("[test_libnfe.c] Failed to get one or more function pointers.\n");
         fflush(stdout);
         FreeLibrary(lib);
         CoUninitialize();
@@ -109,13 +109,12 @@ int main() {
         return 1;
     }
     
-    printf("Testing NfeStatusServico...\n");
-    printf("Payload: (from %s\\status_servico.json)\n", getenv("LIBNFE_TEST_DIR") ? getenv("LIBNFE_TEST_DIR") : "test");
+    printf("[test_libnfe.c] Testing NfeStatusServico...\n");
     fflush(stdout);
     
     BSTR bstr_status_response = NfeStatusServico(status_payload);
-    printf("Response: ");
-    PrintBstr(bstr_status_response); // PrintBstr now contains a flush
+    printf("[test_libnfe.c] Response: ");
+    PrintBstr(bstr_status_response);
     printf("\n");
     fflush(stdout);
     free(status_payload);
@@ -128,13 +127,12 @@ int main() {
         return 1;
     }
 
-    printf("Testing NFeAutorizacao...\n");
-    printf("Payload: (from %s\\nfe.json)\n", getenv("LIBNFE_TEST_DIR") ? getenv("LIBNFE_TEST_DIR") : "test");
+    printf("[test_libnfe.c] Testing NFeAutorizacao...\n");
     fflush(stdout);
 
     BSTR bstr_nfe_response = NFeAutorizacao(json_nfe_payload);
-    printf("Response: ");
-    PrintBstr(bstr_nfe_response); // PrintBstr now contains a flush
+    printf("[test_libnfe.c] Response: ");
+    PrintBstr(bstr_nfe_response);
     printf("\n");
     fflush(stdout);
     free(json_nfe_payload);
@@ -142,7 +140,7 @@ int main() {
     // Clean up resources
     FreeLibrary(lib);
 
-    printf("Tests finished.\n");
+    printf("[test_libnfe.c] Tests finished.\n");
     fflush(stdout);
 
     // Uninitialize the COM library before exiting

@@ -65,8 +65,9 @@ static BSTR char_to_bstr(const char* utf8_str) {
 static BSTR return_error(const char* msg) {
     char error_json[1024];
     snprintf(error_json, sizeof(error_json), "{\"error\": \"%s\"}", msg);
-    fprintf(stderr, "FATAL ERROR: %s\n", msg);
+    fprintf(stderr, "[libnfe.c] FATAL ERROR: %s\n", msg);
     ERR_print_errors_fp(stderr);
+    fflush(stderr);
     if (g_bstr_response) SysFreeString(g_bstr_response);
     g_bstr_response = char_to_bstr(error_json);
     return g_bstr_response;
@@ -244,15 +245,13 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         return return_error("Failed to connect to server.");
     }
 
-    // --- Set Socket Timeout to Prevent Freezing ---
     SSL* ssl = NULL;
     BIO_get_ssl(bio, &ssl);
     long sock_fd = BIO_get_fd(bio, NULL);
     struct timeval tv;
-    tv.tv_sec = 5;  // 5 second timeout
+    tv.tv_sec = 5;
     tv.tv_usec = 0;
     setsockopt((SOCKET)sock_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
-
 
     char request_header[1024];
     size_t payload_len = strlen(final_payload);
@@ -288,10 +287,23 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         }
         
         if (response_buffer) {
-            response_buffer[total_len] = '\0';
-            char* body = strstr(response_buffer, "\r\n\r\n");
-            if (g_bstr_response) SysFreeString(g_bstr_response);
-            g_bstr_response = char_to_bstr(body ? body + 4 : "");
+            fprintf(stderr, "[libnfe.c] BIO_read loop finished. Total bytes read: %zu\n", total_len);
+            fflush(stderr);
+
+            if (total_len > 0) {
+                response_buffer[total_len] = '\0';
+                fprintf(stderr, "\n--- [libnfe.c] RAW RESPONSE BUFFER ---\n%s\n-------------------------------------\n", response_buffer);
+                fflush(stderr);
+
+                char* body = strstr(response_buffer, "\r\n\r\n");
+                if (g_bstr_response) SysFreeString(g_bstr_response);
+                g_bstr_response = char_to_bstr(body ? body + 4 : "");
+            } else {
+                 fprintf(stderr, "[libnfe.c] No data was read from the server.\n");
+                 fflush(stderr);
+                 if (g_bstr_response) SysFreeString(g_bstr_response);
+                 g_bstr_response = char_to_bstr("{\"error\": \"No data received from server.\"}");
+            }
             free(response_buffer);
         }
     }
