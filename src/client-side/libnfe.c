@@ -12,6 +12,7 @@
 #include <openssl/provider.h>
 #include <openssl/applink.c>
 #include <shlwapi.h>
+#include <time.h>
 
 #include "cJSON.h"
 #include "libnfe.h"
@@ -65,7 +66,7 @@ static BSTR char_to_bstr(const char* utf8_str) {
 static BSTR return_error(const char* msg, int cleanup_winsock) {
     char error_json[1024];
     snprintf(error_json, sizeof(error_json), "{\"error\": \"%s\"}", msg);
-    fprintf(stderr, "[libnfe.c] ERROR: %s\n", msg);
+    fprintf(stderr, "[libnfe.c] [%I64d] ERROR: %s\n", (long long)time(NULL), msg);
     ERR_print_errors_fp(stderr);
     fflush(stderr);
     if (g_bstr_response) SysFreeString(g_bstr_response);
@@ -149,6 +150,9 @@ static Config* load_config() {
 }
 
 static BSTR nfe_service_request(const char* service_url, const Config* config, const char* user_payload) {
+    fprintf(stderr, "[libnfe.c] [%I64d] Entering nfe_service_request, URL: %s, Payload: %s\n", (long long)time(NULL), service_url, user_payload);
+    fflush(stderr);
+
     if (!service_url) return return_error("Service URL not defined", 0);
 
     cJSON* wrapper = cJSON_CreateObject();
@@ -167,12 +171,16 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     if (!final_payload) {
         return return_error("Failed to create JSON payload.", 0);
     }
+    fprintf(stderr, "[libnfe.c] [%I64d] JSON payload created: %s\n", (long long)time(NULL), final_payload);
+    fflush(stderr);
 
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         free(final_payload);
         return return_error("Winsock init failed", 0);
     }
+    fprintf(stderr, "[libnfe.c] [%I64d] Winsock initialized\n", (long long)time(NULL));
+    fflush(stderr);
 
     OPENSSL_init_ssl(0, NULL);
     SSL_CTX* ssl_ctx = SSL_CTX_new(TLS_client_method());
@@ -181,6 +189,8 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         WSACleanup();
         return return_error("Failed to create SSL_CTX", 1);
     }
+    fprintf(stderr, "[libnfe.c] [%I64d] SSL_CTX created\n", (long long)time(NULL));
+    fflush(stderr);
 
     FILE* pfx_file = fopen(config->certificate_path, "rb");
     if (!pfx_file) {
@@ -189,6 +199,8 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         WSACleanup();
         return return_error("Failed to open client PFX file.", 1);
     }
+    fprintf(stderr, "[libnfe.c] [%I64d] PFX file opened: %s\n", (long long)time(NULL), config->certificate_path);
+    fflush(stderr);
     
     PKCS12* pfx = d2i_PKCS12_fp(pfx_file, NULL);
     fclose(pfx_file);
@@ -198,6 +210,8 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         WSACleanup();
         return return_error("Failed to parse PFX file.", 1);
     }
+    fprintf(stderr, "[libnfe.c] [%I64d] PFX file parsed\n", (long long)time(NULL));
+    fflush(stderr);
 
     EVP_PKEY* pkey = NULL;
     X509* cert = NULL;
@@ -209,6 +223,8 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         return return_error("Failed to parse PKCS12 data. Check password.", 1);
     }
     PKCS12_free(pfx);
+    fprintf(stderr, "[libnfe.c] [%I64d] PKCS12 data parsed\n", (long long)time(NULL));
+    fflush(stderr);
 
     if (SSL_CTX_use_certificate(ssl_ctx, cert) <= 0 || SSL_CTX_use_PrivateKey(ssl_ctx, pkey) <= 0) {
         free(final_payload);
@@ -218,6 +234,9 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         WSACleanup();
         return return_error("Failed to use client certificate or private key.", 1);
     }
+    fprintf(stderr, "[libnfe.c] [%I64d] Client certificate and private key loaded\n", (long long)time(NULL));
+    fflush(stderr);
+
     if (SSL_CTX_load_verify_locations(ssl_ctx, config->cacerts_path, NULL) != 1) {
         free(final_payload);
         EVP_PKEY_free(pkey);
@@ -226,6 +245,8 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         WSACleanup();
         return return_error("Failed to load CA certificate.", 1);
     }
+    fprintf(stderr, "[libnfe.c] [%I64d] CA certificate loaded: %s\n", (long long)time(NULL), config->cacerts_path);
+    fflush(stderr);
 
     const char *url_prefix = "https://";
     const char *host_start = (strncmp(service_url, url_prefix, strlen(url_prefix)) == 0) ? service_url + strlen(url_prefix) : service_url;
@@ -243,6 +264,8 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     strncpy(host_and_port, host_start, host_len);
     host_and_port[host_len] = '\0';
     const char *path = path_start;
+    fprintf(stderr, "[libnfe.c] [%I64d] Parsed URL: Host=%s, Path=%s\n", (long long)time(NULL), host_and_port, path);
+    fflush(stderr);
 
     BIO* bio = BIO_new_ssl_connect(ssl_ctx);
     if (!bio) {
@@ -253,7 +276,8 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         WSACleanup();
         return return_error("Failed to create BIO.", 1);
     }
-    BIO_set_conn_hostname(bio, host_and_port);
+    fprintf(stderr, "[libnfe.c] [%I64d] BIO created\n", (long long)time(NULL));
+    fflush(stderr);
 
     SSL* ssl = NULL;
     BIO_get_ssl(bio, &ssl);
@@ -266,34 +290,99 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         WSACleanup();
         return return_error("Failed to initialize SSL.", 1);
     }
+    fprintf(stderr, "[libnfe.c] [%I64d] SSL initialized\n", (long long)time(NULL));
+    fflush(stderr);
 
-    if (BIO_do_connect(bio) <= 0) {
-        char err_msg[256];
-        snprintf(err_msg, sizeof(err_msg), "Failed to connect to server: %s", ERR_reason_error_string(ERR_get_error()));
+    BIO_set_conn_hostname(bio, host_and_port);
+    fprintf(stderr, "[libnfe.c] [%I64d] BIO hostname set: %s\n", (long long)time(NULL), host_and_port);
+    fflush(stderr);
+
+    BIO_set_nbio(bio, 1); // Set non-blocking
+    fprintf(stderr, "[libnfe.c] [%I64d] BIO set to non-blocking\n", (long long)time(NULL));
+    fflush(stderr);
+
+    time_t start_time = time(NULL);
+    while (BIO_do_connect(bio) <= 0) {
+        if (time(NULL) - start_time > 10) {
+            free(final_payload);
+            EVP_PKEY_free(pkey);
+            X509_free(cert);
+            BIO_free_all(bio);
+            SSL_CTX_free(ssl_ctx);
+            WSACleanup();
+            return return_error("Connection timed out after 10 seconds.", 1);
+        }
+        if (!BIO_should_retry(bio)) {
+            char err_msg[256];
+            snprintf(err_msg, sizeof(err_msg), "Failed to connect to server: %s", ERR_reason_error_string(ERR_get_error()));
+            free(final_payload);
+            EVP_PKEY_free(pkey);
+            X509_free(cert);
+            BIO_free_all(bio);
+            SSL_CTX_free(ssl_ctx);
+            WSACleanup();
+            return return_error(err_msg, 1);
+        }
+    }
+    fprintf(stderr, "[libnfe.c] [%I64d] Connected to server\n", (long long)time(NULL));
+    fflush(stderr);
+
+    if (SSL_get_verify_result(ssl) != X509_V_OK) {
         free(final_payload);
         EVP_PKEY_free(pkey);
         X509_free(cert);
         BIO_free_all(bio);
         SSL_CTX_free(ssl_ctx);
         WSACleanup();
-        return return_error(BIO_should_retry(bio) ? "Connection timed out." : err_msg, 1);
+        return return_error("Server certificate verification failed.", 1);
     }
+    fprintf(stderr, "[libnfe.c] [%I64d] Server certificate verified\n", (long long)time(NULL));
+    fflush(stderr);
 
     long sock_fd = BIO_get_fd(bio, NULL);
     struct timeval tv;
-    tv.tv_sec = 10; // Increased timeout to 10 seconds
+    tv.tv_sec = 10;
     tv.tv_usec = 0;
     setsockopt((SOCKET)sock_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+    fprintf(stderr, "[libnfe.c] [%I64d] Socket timeout set to 10 seconds\n", (long long)time(NULL));
+    fflush(stderr);
 
     char request_header[1024];
     size_t payload_len = strlen(final_payload);
-    int header_len = sprintf(request_header, "POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",
+    int header_len = snprintf(request_header, sizeof(request_header),
+        "POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n",
         path, host_and_port, payload_len);
-    
-    BIO_write(bio, request_header, header_len);
-    BIO_write(bio, final_payload, payload_len);
-    BIO_flush(bio);
+    fprintf(stderr, "[libnfe.c] [%I64d] Request header: %s\n", (long long)time(NULL), request_header);
+    fflush(stderr);
+
+    if (BIO_write(bio, request_header, header_len) <= 0) {
+        free(final_payload);
+        EVP_PKEY_free(pkey);
+        X509_free(cert);
+        BIO_free_all(bio);
+        SSL_CTX_free(ssl_ctx);
+        WSACleanup();
+        return return_error("Failed to write request header.", 1);
+    }
+    fprintf(stderr, "[libnfe.c] [%I64d] Request header sent\n", (long long)time(NULL));
+    fflush(stderr);
+
+    if (BIO_write(bio, final_payload, payload_len) <= 0) {
+        free(final_payload);
+        EVP_PKEY_free(pkey);
+        X509_free(cert);
+        BIO_free_all(bio);
+        SSL_CTX_free(ssl_ctx);
+        WSACleanup();
+        return return_error("Failed to write payload.", 1);
+    }
+    fprintf(stderr, "[libnfe.c] [%I64d] Payload sent: %s\n", (long long)time(NULL), final_payload);
     free(final_payload);
+    fflush(stderr);
+
+    BIO_flush(bio);
+    fprintf(stderr, "[libnfe.c] [%I64d] BIO flushed\n", (long long)time(NULL));
+    fflush(stderr);
 
     char* response_buffer = NULL;
     size_t buffer_size = 8192;
@@ -307,53 +396,66 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         WSACleanup();
         return return_error("Failed to allocate response buffer.", 1);
     }
+    fprintf(stderr, "[libnfe.c] [%I64d] Response buffer allocated, size: %zu\n", (long long)time(NULL), buffer_size);
+    fflush(stderr);
 
     int max_attempts = 10;
     int attempts = 0;
     int len;
-    while ((len = BIO_read(bio, response_buffer + total_len, buffer_size - total_len - 1)) >= 0) {
-        if (len == 0) {
-            // Connection closed by server
+    start_time = time(NULL);
+    while (attempts < max_attempts) {
+        len = BIO_read(bio, response_buffer + total_len, buffer_size - total_len - 1);
+        fprintf(stderr, "[libnfe.c] [%I64d] BIO_read attempt %d, returned %d\n", (long long)time(NULL), attempts + 1, len);
+        fflush(stderr);
+        if (len > 0) {
+            total_len += len;
+            response_buffer[total_len] = '\0';
+            fprintf(stderr, "[libnfe.c] [%I64d] Read %d bytes, total: %zu, content: %s\n", (long long)time(NULL), len, total_len, response_buffer);
+            fflush(stderr);
+            if (total_len >= buffer_size - 1) {
+                buffer_size *= 2;
+                char* new_buffer = (char*)realloc(response_buffer, buffer_size);
+                if (!new_buffer) {
+                    free(response_buffer);
+                    EVP_PKEY_free(pkey);
+                    X509_free(cert);
+                    BIO_free_all(bio);
+                    SSL_CTX_free(ssl_ctx);
+                    WSACleanup();
+                    return return_error("Failed to reallocate response buffer.", 1);
+                }
+                response_buffer = new_buffer;
+                fprintf(stderr, "[libnfe.c] [%I64d] Response buffer reallocated, new size: %zu\n", (long long)time(NULL), buffer_size);
+                fflush(stderr);
+            }
+        } else if (len == 0) {
+            fprintf(stderr, "[libnfe.c] [%I64d] Connection closed by server\n", (long long)time(NULL));
+            fflush(stderr);
             break;
-        }
-        total_len += len;
-        if (total_len >= buffer_size - 1) {
-            buffer_size *= 2;
-            char* new_buffer = (char*)realloc(response_buffer, buffer_size);
-            if (!new_buffer) {
+        } else {
+            int ssl_err = SSL_get_error(ssl, len);
+            fprintf(stderr, "[libnfe.c] [%I64d] BIO_read error, SSL error code: %d, %s\n", (long long)time(NULL), ssl_err, ERR_reason_error_string(ERR_get_error()));
+            fflush(stderr);
+            if (!BIO_should_retry(bio)) {
                 free(response_buffer);
                 EVP_PKEY_free(pkey);
                 X509_free(cert);
                 BIO_free_all(bio);
                 SSL_CTX_free(ssl_ctx);
                 WSACleanup();
-                return return_error("Failed to reallocate response buffer.", 1);
+                return return_error("BIO_read failed, not retryable.", 1);
             }
-            response_buffer = new_buffer;
+            if (time(NULL) - start_time > 10) {
+                free(response_buffer);
+                EVP_PKEY_free(pkey);
+                X509_free(cert);
+                BIO_free_all(bio);
+                SSL_CTX_free(ssl_ctx);
+                WSACleanup();
+                return return_error("BIO_read timed out after 10 seconds.", 1);
+            }
         }
         attempts++;
-        if (attempts >= max_attempts) {
-            free(response_buffer);
-            EVP_PKEY_free(pkey);
-            X509_free(cert);
-            BIO_free_all(bio);
-            SSL_CTX_free(ssl_ctx);
-            WSACleanup();
-            return return_error("Maximum read attempts reached.", 1);
-        }
-    }
-    
-    fprintf(stderr, "[libnfe.c] BIO_read loop finished. Total bytes read: %zu\n", total_len);
-    fflush(stderr);
-
-    if (len < 0 && BIO_should_retry(bio)) {
-        free(response_buffer);
-        EVP_PKEY_free(pkey);
-        X509_free(cert);
-        BIO_free_all(bio);
-        SSL_CTX_free(ssl_ctx);
-        WSACleanup();
-        return return_error("Read operation timed out.", 1);
     }
 
     if (total_len <= 0) {
@@ -367,14 +469,14 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     }
 
     response_buffer[total_len] = '\0';
-    fprintf(stderr, "\n--- [libnfe.c] RAW RESPONSE BUFFER ---\n%s\n-------------------------------------\n", response_buffer);
+    fprintf(stderr, "[libnfe.c] [%I64d] RAW RESPONSE BUFFER:\n%s\n", (long long)time(NULL), response_buffer);
     fflush(stderr);
 
     // Parse HTTP status code
     int http_status = 0;
     if (strncmp(response_buffer, "HTTP/1.1 ", 9) == 0) {
         sscanf(response_buffer + 9, "%d", &http_status);
-        fprintf(stderr, "[libnfe.c] HTTP Status: %d\n", http_status);
+        fprintf(stderr, "[libnfe.c] [%I64d] HTTP Status: %d\n", (long long)time(NULL), http_status);
         fflush(stderr);
     } else {
         free(response_buffer);
@@ -397,6 +499,8 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
         return return_error("Invalid HTTP response format: No body found.", 1);
     }
     body += 4;
+    fprintf(stderr, "[libnfe.c] [%I64d] Response body: %s\n", (long long)time(NULL), body);
+    fflush(stderr);
 
     if (http_status != 200) {
         char error_msg[1024];
@@ -412,12 +516,17 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
 
     if (g_bstr_response) SysFreeString(g_bstr_response);
     g_bstr_response = char_to_bstr(body);
+    fprintf(stderr, "[libnfe.c] [%I64d] BSTR created for response\n", (long long)time(NULL));
+    fflush(stderr);
+
     free(response_buffer);
     EVP_PKEY_free(pkey);
     X509_free(cert);
     BIO_free_all(bio);
     SSL_CTX_free(ssl_ctx);
     WSACleanup();
+    fprintf(stderr, "[libnfe.c] [%I64d] Cleanup complete, returning BSTR\n", (long long)time(NULL));
+    fflush(stderr);
 
     return g_bstr_response;
 }

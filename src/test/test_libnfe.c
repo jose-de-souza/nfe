@@ -1,149 +1,178 @@
 #include <stdio.h>
 #include <windows.h>
 #include <oleauto.h>
-#include <objbase.h> // Required for COM initialization
+#include <objbase.h>
+#include <time.h>
 #include "cJSON.h"
-#include <openssl/applink.c> // Required for OpenSSL + MSVC
+#include <openssl/applink.c>
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
 
-// Helper function to print a BSTR to the console
 void PrintBstr(BSTR bstr) {
     if (bstr != NULL) {
-        // Use wprintf for wide-character BSTR strings
         wprintf(L"%s\n", bstr);
     } else {
         printf("(null)\n");
     }
-    fflush(stdout); // Force the output to be written to the console
+    fflush(stdout);
 }
 
-// Helper function to read a JSON file into a string
 char* ReadFileToString(const char* filename) {
+    fprintf(stderr, "[test_libnfe.c] [%I64d] Entering ReadFileToString: %s\n", (long long)time(NULL), filename);
+    fflush(stderr);
+
     char full_path[MAX_PATH];
-    // Use the LIBNFE_TEST_DIR environment variable to find the test files
     const char* test_dir = getenv("LIBNFE_TEST_DIR");
-    if (!test_dir) test_dir = "test"; // Default to a 'test' subdirectory
+    if (!test_dir) test_dir = "test";
     snprintf(full_path, MAX_PATH, "%s\\%s", test_dir, filename);
+    fprintf(stderr, "[test_libnfe.c] [%I64d] Full path: %s\n", (long long)time(NULL), full_path);
+    fflush(stderr);
 
     FILE* fp = fopen(full_path, "r");
     if (!fp) {
-        printf("[test_libnfe.c] Failed to open %s\n", full_path);
+        fprintf(stderr, "[test_libnfe.c] [%I64d] Failed to open %s\n", (long long)time(NULL), full_path);
         fflush(stdout);
         return NULL;
     }
+
     fseek(fp, 0, SEEK_END);
     long size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
+    fprintf(stderr, "[test_libnfe.c] [%I64d] File size: %ld bytes\n", (long long)time(NULL), size);
+    fflush(stderr);
+
     char* buffer = (char*)malloc(size + 1);
     if (!buffer) {
-        printf("[test_libnfe.c] Failed to allocate memory for %s\n", full_path);
+        fprintf(stderr, "[test_libnfe.c] [%I64d] Failed to allocate memory for %s\n", (long long)time(NULL), full_path);
         fflush(stdout);
         fclose(fp);
         return NULL;
     }
+
     size_t read_size = fread(buffer, 1, size, fp);
     buffer[read_size] = '\0';
+    fprintf(stderr, "[test_libnfe.c] [%I64d] Read %zu bytes from %s\n", (long long)time(NULL), read_size, full_path);
+    fflush(stderr);
+
     fclose(fp);
 
-    // Basic validation to ensure the file content is valid JSON
     cJSON* json = cJSON_Parse(buffer);
     if (!json) {
-        printf("[test_libnfe.c] Invalid JSON in %s: %s\n", full_path, cJSON_GetErrorPtr());
+        fprintf(stderr, "[test_libnfe.c] [%I64d] Invalid JSON in %s: %s\n", (long long)time(NULL), full_path, cJSON_GetErrorPtr());
         fflush(stdout);
         free(buffer);
         return NULL;
     }
     cJSON_Delete(json);
+    fprintf(stderr, "[test_libnfe.c] [%I64d] JSON validated for %s\n", (long long)time(NULL), full_path);
+    fflush(stderr);
+
     return buffer;
 }
 
 int main() {
-    // Initialize the COM library for the current thread
+    fprintf(stderr, "[test_libnfe.c] [%I64d] Starting main\n", (long long)time(NULL));
+    fflush(stderr);
+
     if (FAILED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED))) {
-        printf("[test_libnfe.c] Failed to initialize COM library\n");
+        fprintf(stderr, "[test_libnfe.c] [%I64d] Failed to initialize COM library\n", (long long)time(NULL));
         fflush(stdout);
         return 1;
     }
+    fprintf(stderr, "[test_libnfe.c] [%I64d] COM initialized\n", (long long)time(NULL));
+    fflush(stderr);
 
-    // Use the LIBNFE_LIBS_DIR environment variable to find the DLL
     const char* lib_dir = getenv("LIBNFE_LIBS_DIR");
-    if (!lib_dir) lib_dir = "libs"; // Default to a 'libs' subdirectory
+    if (!lib_dir) lib_dir = "libs";
     char dll_path[MAX_PATH];
     snprintf(dll_path, MAX_PATH, "%s\\libnfe.dll", lib_dir);
-    
+    fprintf(stderr, "[test_libnfe.c] [%I64d] DLL path: %s\n", (long long)time(NULL), dll_path);
+    fflush(stderr);
+
     HMODULE lib = LoadLibraryA(dll_path);
     if (!lib) {
-        printf("[test_libnfe.c] Failed to load %s.\n", dll_path);
+        fprintf(stderr, "[test_libnfe.c] [%I64d] Failed to load %s, error code: %lu\n", (long long)time(NULL), dll_path, GetLastError());
         fflush(stdout);
         CoUninitialize();
         return 1;
     }
-    printf("[test_libnfe.c] libnfe.dll loaded successfully.\n\n");
+    fprintf(stderr, "[test_libnfe.c] [%I64d] libnfe.dll loaded successfully\n", (long long)time(NULL));
     fflush(stdout);
 
-    // Define function pointers with the explicit, standard syntax
     BSTR (*NfeStatusServico)(const char*);
     BSTR (*NFeAutorizacao)(const char*);
-
-    // Cast the result of GetProcAddress to the correct function pointer type
     NfeStatusServico = (BSTR (*)(const char*))GetProcAddress(lib, "NfeStatusServico");
     NFeAutorizacao = (BSTR (*)(const char*))GetProcAddress(lib, "NFeAutorizacao");
-
-
     if (!NfeStatusServico || !NFeAutorizacao) {
-        printf("[test_libnfe.c] Failed to get one or more function pointers.\n");
+        fprintf(stderr, "[test_libnfe.c] [%I64d] Failed to get function pointers, error code: %lu\n", (long long)time(NULL), GetLastError());
         fflush(stdout);
         FreeLibrary(lib);
         CoUninitialize();
         return 1;
     }
+    fprintf(stderr, "[test_libnfe.c] [%I64d] Function pointers loaded\n", (long long)time(NULL));
+    fflush(stderr);
 
-    // --- Test NfeStatusServico ---
     char* status_payload = ReadFileToString("status_servico.json");
     if (!status_payload) {
+        fprintf(stderr, "[test_libnfe.c] [%I64d] Failed to read status_servico.json\n", (long long)time(NULL));
+        fflush(stdout);
         FreeLibrary(lib);
         CoUninitialize();
         return 1;
     }
-    
-    printf("[test_libnfe.c] Testing NfeStatusServico...\n");
+    fprintf(stderr, "[test_libnfe.c] [%I64d] status_servico.json loaded: %s\n", (long long)time(NULL), status_payload);
+    fflush(stderr);
+
+    fprintf(stderr, "[test_libnfe.c] [%I64d] Testing NfeStatusServico...\n", (long long)time(NULL));
     fflush(stdout);
-    
+
     BSTR bstr_status_response = NfeStatusServico(status_payload);
+    fprintf(stderr, "[test_libnfe.c] [%I64d] NfeStatusServico returned\n", (long long)time(NULL));
+    fflush(stderr);
+
     printf("[test_libnfe.c] Response: ");
     PrintBstr(bstr_status_response);
     printf("\n");
     fflush(stdout);
     free(status_payload);
 
-    // --- Test NFeAutorizacao ---
     char* json_nfe_payload = ReadFileToString("nfe.json");
     if (!json_nfe_payload) {
+        fprintf(stderr, "[test_libnfe.c] [%I64d] Failed to read nfe.json\n", (long long)time(NULL));
+        fflush(stdout);
         FreeLibrary(lib);
         CoUninitialize();
         return 1;
     }
+    fprintf(stderr, "[test_libnfe.c] [%I64d] nfe.json loaded: %s\n", (long long)time(NULL), json_nfe_payload);
+    fflush(stderr);
 
-    printf("[test_libnfe.c] Testing NFeAutorizacao...\n");
+    fprintf(stderr, "[test_libnfe.c] [%I64d] Testing NFeAutorizacao...\n", (long long)time(NULL));
     fflush(stdout);
 
     BSTR bstr_nfe_response = NFeAutorizacao(json_nfe_payload);
+    fprintf(stderr, "[test_libnfe.c] [%I64d] NFeAutorizacao returned\n", (long long)time(NULL));
+    fflush(stderr);
+
     printf("[test_libnfe.c] Response: ");
     PrintBstr(bstr_nfe_response);
     printf("\n");
     fflush(stdout);
     free(json_nfe_payload);
-    
-    // Clean up resources
+
     FreeLibrary(lib);
+    fprintf(stderr, "[test_libnfe.c] [%I64d] libnfe.dll freed\n", (long long)time(NULL));
+    fflush(stderr);
 
     printf("[test_libnfe.c] Tests finished.\n");
     fflush(stdout);
 
-    // Uninitialize the COM library before exiting
     CoUninitialize();
+    fprintf(stderr, "[test_libnfe.c] [%I64d] COM uninitialized\n", (long long)time(NULL));
+    fflush(stderr);
+
     return 0;
 }

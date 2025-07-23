@@ -2,7 +2,6 @@
 setlocal EnableDelayedExpansion
 
 echo [INFO] Setting up test environment in C:\madeiras\erp...
-echo [DEBUG] test_libnfe.bat version: 9b8a7c6d-5e4f-4a3b-9f2c-1d0e9f8a7b6c
 
 :: Set environment variables
 set "LIBNFE_CONFIG_DIR=C:\madeiras\erp\cfg"
@@ -47,11 +46,11 @@ if %ERRORLEVEL% neq 0 (
 )
 del %THUMBPRINT_FILE%.err >nul 2>&1
 
-:: Parse thumbprint using PowerShell
-:: Extract 64-character hex string, handling variations in output format
-for /f "tokens=*" %%a in ('powershell -Command "Get-Content %THUMBPRINT_FILE% | ForEach-Object { if ($_ -match '([0-9a-fA-F]{64})') { $Matches[1] } }"') do (
+:: Parse thumbprint
+for /f "tokens=2 delims==" %%a in ('type %THUMBPRINT_FILE%') do (
     set "TEST_CLIENT_THUMBPRINT=%%a"
 )
+set "TEST_CLIENT_THUMBPRINT=%TEST_CLIENT_THUMBPRINT: =%"
 if not defined TEST_CLIENT_THUMBPRINT (
     echo [ERROR] Failed to parse certificate thumbprint from %THUMBPRINT_FILE%.
     type %THUMBPRINT_FILE%
@@ -78,12 +77,13 @@ if %ERRORLEVEL% neq 0 (
 echo [INFO] Waiting 5 seconds for the server to start...
 ping 127.0.0.1 -n 6 >nul
 
-:: Run the test executable
+:: Run the test executable with redirected output
 echo [INFO] Running test_libnfe.exe...
 echo -------------------------------------------------
-C:\madeiras\erp\test_libnfe.exe
+C:\madeiras\erp\test_libnfe.exe > C:\madeiras\erp\test_output.txt 2>&1
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] test_libnfe.exe failed with error code %ERRORLEVEL%.
+    type C:\madeiras\erp\test_output.txt
 )
 
 echo -------------------------------------------------
