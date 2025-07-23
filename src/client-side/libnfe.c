@@ -72,6 +72,31 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
     return TRUE;
 }
 
+static int check_console_interrupt() {
+    HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD mode;
+    if (GetConsoleMode(hStdin, &mode)) {
+        INPUT_RECORD record[128];
+        DWORD events;
+        if (PeekConsoleInput(hStdin, record, 128, &events) && events > 0) {
+            for (DWORD i = 0; i < events; i++) {
+                if (record[i].EventType == KEY_EVENT && 
+                    record[i].Event.KeyEvent.bKeyDown && 
+                    record[i].Event.KeyEvent.wVirtualKeyCode == VK_CONTROL &&
+                    record[i].Event.KeyEvent.dwControlKeyState & LEFT_CTRL_PRESSED) {
+                    g_interrupted = 1;
+                    fprintf(stderr, "[libnfe.c] [%I64d] Detected Ctrl+C via console input check\n", (long long)time(NULL));
+                    fflush(stderr);
+                    FlushConsoleInputBuffer(hStdin);
+                    return 1;
+                }
+            }
+            FlushConsoleInputBuffer(hStdin);
+        }
+    }
+    return 0;
+}
+
 static BSTR char_to_bstr(const char* utf8_str) {
     if (!utf8_str) return NULL;
     int w_len = MultiByteToWideChar(CP_UTF8, 0, utf8_str, -1, NULL, 0);
@@ -427,6 +452,7 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
             fflush(stderr);
             break;
         }
+        check_console_interrupt();
         int ssl_err = SSL_get_error(ssl, BIO_do_connect(bio));
         if (!BIO_should_retry(bio)) {
             char err_msg[256];
@@ -492,9 +518,19 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     fprintf(stderr, "[libnfe.c] [%I64d] Server certificate verified\n", (long long)time(NULL));
     fflush(stderr);
 
-    // Set socket timeouts
+    // Set socket to non-blocking
     long sock_fd = BIO_get_fd(bio, NULL);
     if (sock_fd != -1) {
+        u_long nonblock = 1;
+        if (ioctlsocket((SOCKET)sock_fd, FIONBIO, &nonblock) != 0) {
+            free(final_payload);
+            EVP_PKEY_free(pkey);
+            X509_free(cert);
+            BIO_free_all(bio);
+            SSL_CTX_free(ssl_ctx);
+            WSACleanup();
+            return return_error("Failed to set socket to non-blocking", 1);
+        }
         struct timeval tv;
         tv.tv_sec = 5;
         tv.tv_usec = 0;
@@ -516,7 +552,7 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
             WSACleanup();
             return return_error("Failed to set socket send timeout", 1);
         }
-        fprintf(stderr, "[libnfe.c] [%I64d] Socket timeouts set to 5 seconds\n", (long long)time(NULL));
+        fprintf(stderr, "[libnfe.c] [%I64d] Socket set to non-blocking and timeouts set to 5 seconds\n", (long long)time(NULL));
         fflush(stderr);
     }
 
@@ -539,6 +575,7 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     int max_write_attempts = 50;
     start_time = time(NULL);
     while (write_attempts < max_write_attempts && bytes_written < header_len && !g_interrupted) {
+        check_console_interrupt();
         int result = BIO_write(bio, request_header + bytes_written, header_len - bytes_written);
         if (result > 0) {
             bytes_written += result;
@@ -598,6 +635,7 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     write_attempts = 0;
     start_time = time(NULL);
     while (write_attempts < max_write_attempts && bytes_written < (int)payload_len && !g_interrupted) {
+        check_console_interrupt();
         int result = BIO_write(bio, final_payload + bytes_written, payload_len - bytes_written);
         if (result > 0) {
             bytes_written += result;
@@ -654,68 +692,7 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     free(final_payload);
     fflush(stderr);
 
-    // Flush BIO in non-blocking mode
-    int flush_attempts = 0;
-    int max_flush_attempts = 50;
-    start_time = time(NULL);
-    while (flush_attempts < max_flush_attempts && !g_interrupted) {
-        int flush_result = BIO_flush(bio);
-        fprintf(stderr, "[libnfe.c] [%I64d] BIO_flush attempt %d, result: %d\n", (long long)time(NULL), flush_attempts + 1, flush_result);
-        fflush(stderr);
-        if (flush_result > 0) {
-            fprintf(stderr, "[libnfe.c] [%I64d] BIO flushed successfully\n", (long long)time(NULL));
-            fflush(stderr);
-            break;
-        }
-        int ssl_err = SSL_get_error(ssl, flush_result);
-        if (BIO_should_retry(bio) || BIO_should_io_special(bio)) {
-            flush_attempts++;
-            Sleep(50);
-        } else if (ssl_err == SSL_ERROR_ZERO_RETURN || ssl_err == SSL_ERROR_SYSCALL) {
-            fprintf(stderr, "[libnfe.c] [%I64d] BIO_flush detected connection closure or syscall error, proceeding to read\n", (long long)time(NULL));
-            fflush(stderr);
-            break; // Connection closed, proceed to read
-        } else {
-            char err_msg[256];
-            unsigned long openssl_err = ERR_get_error();
-            ERR_error_string_n(openssl_err, err_msg, sizeof(err_msg));
-            snprintf(err_msg, sizeof(err_msg), "BIO_flush failed: SSL error: %d, OpenSSL error: %s", ssl_err, ERR_reason_error_string(openssl_err));
-            EVP_PKEY_free(pkey);
-            X509_free(cert);
-            BIO_free_all(bio);
-            SSL_CTX_free(ssl_ctx);
-            WSACleanup();
-            return return_error(err_msg, 1);
-        }
-        if ((time(NULL) - start_time) > 5) {
-            EVP_PKEY_free(pkey);
-            X509_free(cert);
-            BIO_free_all(bio);
-            SSL_CTX_free(ssl_ctx);
-            WSACleanup();
-            return return_error("BIO_flush timed out after 5 seconds", 1);
-        }
-    }
-
-    if (g_interrupted) {
-        EVP_PKEY_free(pkey);
-        X509_free(cert);
-        BIO_free_all(bio);
-        SSL_CTX_free(ssl_ctx);
-        WSACleanup();
-        return return_error("Operation interrupted by Ctrl+C during BIO flush", 1);
-    }
-
-    if (flush_attempts >= max_flush_attempts) {
-        EVP_PKEY_free(pkey);
-        X509_free(cert);
-        BIO_free_all(bio);
-        SSL_CTX_free(ssl_ctx);
-        WSACleanup();
-        return return_error("BIO_flush failed after maximum attempts", 1);
-    }
-
-    // Read response in non-blocking mode
+    // Read response in non-blocking mode with select
     char* response_buffer = NULL;
     size_t buffer_size = 8192;
     size_t total_len = 0;
@@ -739,6 +716,43 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
     int max_read_attempts = 100;
     start_time = time(NULL);
     while (read_attempts < max_read_attempts && !g_interrupted) {
+        check_console_interrupt();
+
+        // Check if socket is readable using select
+        fd_set read_fds;
+        FD_ZERO(&read_fds);
+        FD_SET((SOCKET)sock_fd, &read_fds);
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 50000; // 50ms
+        int select_result = select((int)sock_fd + 1, &read_fds, NULL, NULL, &timeout);
+        if (select_result < 0) {
+            char err_msg[256];
+            snprintf(err_msg, sizeof(err_msg), "select failed: %d", WSAGetLastError());
+            free(response_buffer);
+            EVP_PKEY_free(pkey);
+            X509_free(cert);
+            BIO_free_all(bio);
+            SSL_CTX_free(ssl_ctx);
+            WSACleanup();
+            return return_error(err_msg, 1);
+        } else if (select_result == 0) {
+            read_attempts++;
+            fprintf(stderr, "[libnfe.c] [%I64d] select timeout, attempt %d\n", (long long)time(NULL), read_attempts);
+            fflush(stderr);
+            if ((time(NULL) - start_time) > 5) {
+                free(response_buffer);
+                EVP_PKEY_free(pkey);
+                X509_free(cert);
+                BIO_free_all(bio);
+                SSL_CTX_free(ssl_ctx);
+                WSACleanup();
+                return return_error("BIO_read timed out after 5 seconds", 1);
+            }
+            continue;
+        }
+
+        // Socket is readable, attempt BIO_read
         int len = BIO_read(bio, response_buffer + total_len, buffer_size - total_len - 1);
         fprintf(stderr, "[libnfe.c] [%I64d] BIO_read attempt %d, returned: %d\n", (long long)time(NULL), read_attempts + 1, len);
         fflush(stderr);
@@ -790,11 +804,10 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
             break; // Exit loop on connection close
         } else {
             int ssl_err = SSL_get_error(ssl, len);
-            if (BIO_should_retry(bio) || BIO_should_io_special(bio)) {
+            if (BIO_should_retry(bio) || BIO_should_io_special(bio) || ssl_err == SSL_ERROR_WANT_READ || ssl_err == SSL_ERROR_WANT_WRITE) {
                 read_attempts++;
                 fprintf(stderr, "[libnfe.c] [%I64d] BIO_read attempt %d, SSL error: %d, retrying\n", (long long)time(NULL), read_attempts, ssl_err);
                 fflush(stderr);
-                Sleep(50);
             } else {
                 char err_msg[256];
                 unsigned long openssl_err = ERR_get_error();
@@ -809,14 +822,14 @@ static BSTR nfe_service_request(const char* service_url, const Config* config, c
                 return return_error(err_msg, 1);
             }
         }
-        if ((time(NULL) - start_time) > 10) {
+        if ((time(NULL) - start_time) > 5) {
             free(response_buffer);
             EVP_PKEY_free(pkey);
             X509_free(cert);
             BIO_free_all(bio);
             SSL_CTX_free(ssl_ctx);
             WSACleanup();
-            return return_error("BIO_read timed out after 10 seconds", 1);
+            return return_error("BIO_read timed out after 5 seconds", 1);
         }
     }
 
